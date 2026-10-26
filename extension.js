@@ -1,4 +1,4 @@
-/* Gacha Mini Games v1.0.0 — personal extension for Gacha Forge on Marinara Engine.
+/* Gacha Mini Games v1.0.1 — personal extension for Gacha Forge on Marinara Engine.
  * While a chapter or story is being generated, the generation screen gets a column of small games on its right:
  * 지뢰찾기, 사과 상자 (the fruit follows the 말랑 colour preset), 2048 and 짝 맞추기. Closing the column or
  * finishing generation removes them; nothing here touches the run, rewards or the generation request.
@@ -456,10 +456,24 @@
     mounted.center.style.position = mounted.position;
     mounted = null;
   }
+  /* The game shows this same screen, saying "Generating story…", while it merely fetches a scene that is already
+   * written: on opening the game, on switching worlds, on entering a chapter. It cannot tell beforehand; a saved
+   * scene just comes back within a second or so. So: never while the game boots or opens a chapter it has already
+   * written, and otherwise only once the screen has been generating for GENERATING_AFTER without a break. */
+  const GENERATING_AFTER = 2500;
+  let generatingSince = 0;
+  function generating(h) {
+    if (!writingLoad(h)) return false;
+    if (h._boot === "idle" || h._boot === "loading") return false;
+    try { if (h._hudView === "forge" && typeof h._chapterWritten === "function" && h._chapterWritten()) return false; } catch {}
+    return true;
+  }
   function sync() {
     if (disposed) return;
-    const h = document.querySelector(HOST_TAG);
-    const center = writingLoad(h) ? h.shadowRoot.querySelector(".forge-center") : null;
+    const h = document.querySelector(HOST_TAG), now = performance.now();
+    if (generating(h)) generatingSince ||= now; else generatingSince = 0;
+    const settled = generatingSince && (mounted || now - generatingSince >= GENERATING_AFTER);
+    const center = settled ? h.shadowRoot.querySelector(".forge-center") : null;
     if (!center) { if (mounted) { mounted.wrap.remove(); release(); } return; }
     if (mounted && mounted.center !== center) { const wrap = mounted.wrap; release(); mounted = { center, wrap, position: center.style.position }; }
     if (!mounted) {

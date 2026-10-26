@@ -34,7 +34,7 @@
 
 ## 설치
 
-마리나라 설정의 개인 확장에서 `Gacha-Mini-Games-1.0.0.personal-extension.zip`을 설치하거나, 로컬 서버에 바로 넣으려면:
+마리나라 설정의 개인 확장에서 `Gacha-Mini-Games-1.0.1.personal-extension.zip`을 설치하거나, 로컬 서버에 바로 넣으려면:
 
 ```
 node tools/install.mjs 7860
@@ -46,6 +46,10 @@ node tools/install.mjs 7860
 node tools/test-games.mjs
 node Gacha-Minigames/tools/test-games-browser.cjs   (상위 폴더에서, Edge 필요)
 ```
+
+## 1.0.1
+
+가챠 포지를 처음 열 때, 세계를 바꿀 때 잠깐 뜨는 로딩 화면에서도 미니게임이 나오던 문제를 고쳤습니다. 게임은 이미 쓰인 장면을 불러올 때도 같은 "Generating story…" 화면을 잠깐 보여 줍니다. 이제 게임이 시작 중이거나 이미 쓰인 챕터를 여는 중이면 띄우지 않고, 그 밖에는 생성 화면이 2.5초 넘게 이어질 때만 미니게임을 띄웁니다.
 
 ## 1.0.0
 
