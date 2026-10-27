@@ -58,7 +58,7 @@
 
 ## 설치
 
-마리나라 설정의 개인 확장에서 `Gacha-Mini-Games-1.3.0.personal-extension.zip`을 설치하거나, 로컬 서버에 바로 넣으려면:
+마리나라 설정의 개인 확장에서 `Gacha-Mini-Games-1.3.1.personal-extension.zip`을 설치하거나, 로컬 서버에 바로 넣으려면:
 
 ```
 node tools/install.mjs 7860
@@ -70,6 +70,10 @@ node tools/install.mjs 7860
 node tools/test-games.mjs
 node Gacha-Minigames/tools/test-games-browser.cjs   (상위 폴더에서, Edge 필요)
 ```
+
+## 1.3.1
+
+쿠키 가게: 말랑 SD 캐릭터 손님을 상반신만 크게 보이게 잘랐습니다(전신이 작게 들어가던 문제). 밤하늘 테마에서 가게 안 글자(도구 이름, 주문, 계산대 말, 오븐 상태)가 흰색이라 안 보이던 문제를 고쳤습니다.
 
 ## 1.3.0
 
