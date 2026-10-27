@@ -1098,7 +1098,7 @@
           }
           if (!st.started && b.lane) {
             ctx.font = '14px Jua, "Malgun Gothic", sans-serif'; ctx.lineWidth = 4; ctx.strokeStyle = C.line; ctx.fillStyle = '#fff';
-            ctx.strokeText('스페이스 꾹 → 발사!', game.cx, 352); ctx.fillText('스페이스 꾹 → 발사!', game.cx, 352);
+            ctx.strokeText('꾹 눌렀다 떼면 발사!', game.cx, 352); ctx.fillText('꾹 눌렀다 떼면 발사!', game.cx, 352);
           }
         };
         // The loop: physics by real time, drawing each frame; it stops once the table is off screen.
