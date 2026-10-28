@@ -79,7 +79,7 @@
 
 ## 설치
 
-마리나라 설정의 개인 확장에서 `Gacha-Mini-Games-1.5.0.personal-extension.zip`을 설치하거나, 로컬 서버에 바로 넣으려면:
+마리나라 설정의 개인 확장에서 `Gacha-Mini-Games-1.5.1.personal-extension.zip`을 설치하거나, 로컬 서버에 바로 넣으려면:
 
 ```
 node tools/install.mjs 7860
@@ -91,6 +91,10 @@ node tools/install.mjs 7860
 node tools/test-games.mjs
 node Gacha-Minigames/tools/test-games-browser.cjs   (상위 폴더에서, Edge 필요)
 ```
+
+## 1.5.1
+
+젤리 블록: 조각을 끌면 게임 카드에 스크롤바가 생기던 문제를 고쳤습니다(끄는 조각이 카드 가장자리를 넘으면 스크롤 영역을 늘리고 있었습니다).
 
 ## 1.5.0
 
