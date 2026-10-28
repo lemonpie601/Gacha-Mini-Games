@@ -20,7 +20,7 @@ MOUNT = r"""
   const wrap = el("div");
   const shadow = host.attachShadow({ mode: "open" });
   const page = new CSSStyleSheet();
-  page.replaceSync(":host, :host([data-game-large]) { position:relative; inset:auto; width:100%; height:100%; } .gfx-load-games { --room:calc(100cqh - 150px); }"
+  page.replaceSync(":host(:not([data-game-large])) { position:relative; inset:auto; width:100%; height:100%; } :host(:not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 150px); }"
     // Phones: the game list becomes one scrolling row above the game.
     + "@media (max-width:640px) { .gfx-load-games { flex-direction:column; align-items:stretch; --room:calc(100cqh - 260px); }"
     + " .gfx-game-nav { flex:none; display:flex; flex-direction:row; overflow-x:auto; overflow-y:hidden; max-height:none; padding:5px; gap:5px; }"
@@ -63,6 +63,16 @@ HTML = """<!doctype html>
   :root[data-preset="mint"] { --gfx-card:#F6FFFA; --gfx-line:#4A3424; --gfx-text:#3E2C1E; --gfx-ink:#E1F7EC; --gfx-pick:#BFEFD8; --gfx-accent:#3FA57A; --page:#CDEEDD; }
   :root[data-preset="lavender"] { --gfx-card:#FCFBFF; --gfx-line:#4F3F85; --gfx-text:#43356F; --gfx-ink:#EFE8FF; --gfx-pick:#DCD0FF; --gfx-accent:#8C6CF0; --page:#E2D8FA; }
   :root[data-preset="night"] { --gfx-card:#2A2E4D; --gfx-line:#14162A; --gfx-text:#F0EEFF; --gfx-ink:#22253D; --gfx-pick:#4A4F80; --gfx-accent:#FFB84D; --page:#171A2E; }
+  /* Gacha Forge's own five UI styles: the tokens the game sets on its arena; the games dress themselves from them. */
+  :root[data-preset^="gf-"] { --body:"Segoe UI", system-ui, -apple-system, sans-serif; }
+  :root[data-preset="gf-base"] { --surface:#EDF1F6; --on-surface:#23374F; --text:#EDF1F6; --ink-2:#151D2C; --ground-1:#17212F; --steel:#4A6E96; --steel-dark:#23374F; --steel-faint:#8AA2BC; --coral:#F2603C; --radius:0px; --radius-sm:0px; --page:#0B1119; }
+  :root[data-preset="gf-aurora"] { --surface:rgba(255,255,255,0.09); --on-surface:#F0EAFB; --text:#EDE8FA; --ink-2:#171334; --ground-1:#171334; --steel:#A98BE0; --steel-dark:#3A2E63; --steel-faint:#AEA0CE; --coral:#E8C87A; --radius:14px; --radius-sm:8px; --page:#07060F; }
+  :root[data-preset="gf-bloom"] { --surface:#FFFFFF; --on-surface:#16233A; --text:#EAF1FC; --ink-2:#1D2B45; --ground-1:#2B3F63; --steel:#6E86AE; --steel-dark:#45566F; --steel-faint:#C3D2E8; --coral:#528CF7; --radius:20px; --radius-sm:12px; --page:#1D2B45; }
+  :root[data-preset="gf-signal"] { --surface:rgba(255,255,255,0.06); --on-surface:#E8EAEE; --text:#FFFFFF; --ink-2:#0C0D10; --ground-1:#0C0D10; --steel:#9AA1AC; --steel-dark:#2A2E36; --steel-faint:#8B929C; --coral:#C8FF3D; --radius:2px; --radius-sm:2px; --page:#08090B; }
+  :root[data-preset="gf-ember"] { --surface:#53381F; --on-surface:#F0D9A8; --text:#F5E7CE; --ink-2:#241811; --ground-1:#3A2A1E; --steel:#C89A4A; --steel-dark:#7A5730; --steel-faint:#BC9C70; --coral:#F0B429; --radius:18px; --radius-sm:10px; --page:#170F0B; }
+  :root[data-preset^="gf-"] header { color:var(--text); }
+  :root[data-preset^="gf-"] select { color:var(--on-surface); background:var(--surface); border-color:var(--steel-dark); box-shadow:none; border-radius:var(--radius-sm); }
+  :root[data-preset^="gf-"] select option { color:#16233A; background:#fff; }
   * { box-sizing:border-box; }
   html, body { margin:0; height:100%; }
   body { display:flex; flex-direction:column; background:var(--page); color:var(--gfx-text); font:16px/1.4 Jua, "Malgun Gothic", sans-serif; }
@@ -84,6 +94,13 @@ HTML = """<!doctype html>
       <option value="mint">민트 초코</option>
       <option value="lavender">라벤더</option>
       <option value="night">밤하늘</option>
+      <optgroup label="가챠 포지 UI 스타일">
+        <option value="gf-base">기본</option>
+        <option value="gf-aurora">오로라</option>
+        <option value="gf-bloom">블룸</option>
+        <option value="gf-signal">시그널</option>
+        <option value="gf-ember">엠버</option>
+      </optgroup>
     </select>
   </label>
 </header>
