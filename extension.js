@@ -1,4 +1,4 @@
-/* Gacha Mini Games v1.5.1 — personal extension for Gacha Forge on Marinara Engine.
+/* Gacha Mini Games v1.5.2 — personal extension for Gacha Forge on Marinara Engine.
  * While a chapter or story is being generated, the generation screen gets a column of small games on its right:
  * 지뢰찾기, 사과 상자 (the fruit follows the 말랑 colour preset), 2048, 짝 맞추기, 쿠키 가게, 디저트 핀볼 and more. Closing the column or
  * finishing generation removes them; nothing here touches the run, rewards or the generation request.
@@ -787,6 +787,12 @@
     // A story fetch/entry is not generation. The Forge screen also covers image generation after text is ready.
     const forge = h.shadowRoot?.querySelector?.('.forge-center');
     const visible = forge && !forge.closest('[hidden]') && forge.getClientRects().length > 0;
+    if (!visible || forge.closest('.forge.-error, .forge.-paused') || h._forgeCancelling) return false;
+    // First-world cast and art have rotating progress labels, often without any
+    // generation verb. Use their actual states, not names or translated labels.
+    const state = typeof h._state === 'function' ? h._state() : null;
+    if (state === 'banner') return h._bannerState === 'loading';
+    if (state === 'art') return h._artState === 'painting';
     const text = visible ? forge.textContent || '' : '';
     if (/(?:실패|오류|취소|failed|error|cancelled)/i.test(text)) return false;
     const working = /(?:생성\s*중|작성\s*중|그리는\s*중|generating|rendering|writing\b)/i.test(text);
