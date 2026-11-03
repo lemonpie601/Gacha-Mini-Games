@@ -37,7 +37,7 @@
 </head>
 <body>
 <header>
-  <h1>🎮 Gacha Mini Games<small>v1.5.2</small></h1>
+  <h1>🎮 Gacha Mini Games<small>v1.8.0</small></h1>
   <label>테마
     <select id="preset">
       <option value="cream">크림 코코아</option>
@@ -57,7 +57,7 @@
 </header>
 <div id="games"></div>
 <script>
-/* Gacha Mini Games v1.5.2 — personal extension for Gacha Forge on Marinara Engine.
+/* Gacha Mini Games v1.6.0 — personal extension for Gacha Forge on Marinara Engine.
  * While a chapter or story is being generated, the generation screen gets a column of small games on its right:
  * 지뢰찾기, 사과 상자 (the fruit follows the 말랑 colour preset), 2048, 짝 맞추기, 쿠키 가게, 디저트 핀볼 and more. Closing the column or
  * finishing generation removes them; nothing here touches the run, rewards or the generation request.
@@ -841,6 +841,447 @@
     game.shape = shape;
     return game;
   }
+  /* Four well-known mobile games, played the way the originals play. All four run on their own clock and pause with the panel. */
+  // Chrome's T-Rex runner on its own 600×150 field. Speeds are in px per 60fps frame, as in the original source.
+  function newDinoGame(random = Math.random, difficulty = 'normal') {
+    const cfg = ({ easy: { start: 5.5, accel: 0.0007, max: 10 }, normal: { start: 6, accel: 0.001, max: 13 }, hard: { start: 7, accel: 0.0016, max: 13 } })[difficulty] || { start: 6, accel: 0.001, max: 13 };
+    const TYPES = { small: { w: 17, h: 35, multi: 4, gap: 120 }, large: { w: 25, h: 50, multi: 7, gap: 120 }, ptero: { w: 46, h: 40, multi: 99, gap: 150 } };
+    const game = { W: 600, H: 150, x: 50, y: 0, vy: 0, holding: false, reachedMin: false, ducking: false, started: false, ended: false, won: false,
+      speed: cfg.start, distance: 0, score: 0, obstacles: [], time: 0, runTime: 0, flash: 0, hundreds: 0, endedAt: 0, kinds: [] };
+    // The dinosaur's hit boxes, relative to its feet: head, body and legs standing; one long box ducking.
+    game.boxes = () => game.ducking && game.y === 0 ? [{ x: game.x + 2, y: 0, w: 55, h: 22 }]
+      : [{ x: game.x + 20, y: 26, w: 22, h: 18 }, { x: game.x + 6, y: 8, w: 28, h: 24 }, { x: game.x + 12, y: 0, w: 14, h: 9 }];
+    const hitBox = o => o.kind === 'ptero' ? { x: o.x + 6, y: o.y + 8, w: o.w - 12, h: 22 } : { x: o.x + 3, y: 0, w: o.w - 6, h: o.h - 4 };
+    const spawn = () => {
+      const kinds = ['small', 'large'];
+      if (game.speed >= 8.5) kinds.push('ptero');
+      let kind = kinds[Math.floor(random() * kinds.length)];
+      // Like the original, the same obstacle never comes three times in a row.
+      if (game.kinds.length >= 2 && game.kinds.slice(-2).every(k => k === kind)) kind = kinds.filter(k => k !== kind)[Math.floor(random() * (kinds.length - 1))];
+      game.kinds = [...game.kinds.slice(-2), kind];
+      const t = TYPES[kind], size = kind !== 'ptero' && game.speed > t.multi ? 1 + Math.floor(random() * 3) : 1, w = t.w * size;
+      const gap = Math.round(w * game.speed + t.gap * 0.6);
+      game.obstacles.push({ kind, size, x: game.W + 4, w, h: t.h, y: kind === 'ptero' ? [0, 25, 50][Math.floor(random() * 3)] : 0,
+        vx: kind === 'ptero' ? (random() < 0.5 ? 0.8 : -0.8) : 0, gap: gap + Math.round(random() * gap * 0.5), seed: Math.floor(random() * 1000) });
+    };
+    game.jump = () => {
+      if (game.ended) return false;
+      game.started = true; game.holding = true;
+      if (game.y > 0 || game.ducking) return false;
+      game.vy = 600 + game.speed * 6; game.y = 0.01; game.reachedMin = false; return true;
+    };
+    game.release = () => { game.holding = false; };
+    game.duck = held => { game.ducking = !!held && !game.ended; if (game.ducking) game.started = true; };
+    game.step = ms => {
+      if (!game.started || game.ended) return;
+      let left = Math.max(0, Math.min(100, ms)) / 1000;
+      while (left > 0 && !game.ended) {
+        const dt = Math.min(left, 1 / 120); left -= dt; game.time += dt; game.runTime += dt;
+        game.flash = Math.max(0, game.flash - dt);
+        if (game.y > 0) {
+          if (game.y >= 30) game.reachedMin = true;
+          // Let go early for a short hop; hold for the full jump. Ducking in the air drops fast.
+          if (((!game.holding && game.reachedMin) || game.y > 55) && game.vy > 300) game.vy = 300;
+          game.vy -= 2160 * (game.ducking ? 3 : 1) * dt; game.y += game.vy * dt;
+          if (game.y <= 0) { game.y = 0; game.vy = 0; }
+        }
+        const px = game.speed * 60 * dt;
+        game.distance += px;
+        game.speed = Math.min(cfg.max, game.speed + cfg.accel * 60 * dt);
+        const score = Math.floor(game.distance * 0.025);
+        if (Math.floor(score / 100) > Math.floor(game.score / 100)) { game.flash = 0.8; game.hundreds++; }
+        game.score = score;
+        for (const o of game.obstacles) o.x -= px + o.vx * 60 * dt;
+        game.obstacles = game.obstacles.filter(o => o.x + o.w > -20);
+        const last = game.obstacles[game.obstacles.length - 1];
+        if (game.runTime > 1.2 && (!last || last.x + last.w + last.gap < game.W)) spawn();
+        for (const o of game.obstacles) {
+          const ob = hitBox(o);
+          if (game.boxes().some(b => b.x < ob.x + ob.w && b.x + b.w > ob.x && game.y + b.y < ob.y + ob.h && game.y + b.y + b.h > ob.y)) { game.ended = true; game.endedAt = game.time; break; }
+        }
+      }
+    };
+    return game;
+  }
+
+  // Water Sort Puzzle: levels that grow by a colour every two, four layers a tube, five undos and one spare tube a level.
+  function newWaterSortGame(random = Math.random, difficulty = 'normal', level = 1) {
+    const base = ({ easy: 3, normal: 4, hard: 6 })[difficulty] || 4;
+    const colors = Math.min(10, base + Math.floor((level - 1) / 2)), capacity = 4;
+    const game = { level, difficulty, colors, capacity, bottles: [], moves: 0, ended: false, won: false, history: [], undos: 5, extra: false };
+    const solved = () => game.bottles.every(b => !b.length || b.length === capacity && b.every(c => c === b[0]));
+    const run = b => { let n = 0; for (let i = b.length - 1; i >= 0 && b[i] === b[b.length - 1]; i--) n++; return n; };
+    // Reverse legal pours from a solved board: every scramble step has a legal forward inverse, so a solution always exists.
+    for (let attempt = 0; attempt < 20; attempt++) {
+      game.bottles = Array.from({ length: colors + 2 }, (_, i) => i < colors ? Array(capacity).fill(i) : []);
+      let previous = null;
+      for (let step = 0; step < colors * 45; step++) {
+        const choices = [];
+        game.bottles.forEach((a, i) => {
+          if (!a.length) return;
+          const top = a[a.length - 1], r = run(a), limit = r === a.length ? r : r - 1;
+          if (!limit) return;
+          game.bottles.forEach((b, j) => {
+            if (i === j || b.length >= capacity || b[b.length - 1] === top || previous && previous[0] === j && previous[1] === i) return;
+            for (let n = 1; n <= Math.min(limit, capacity - b.length); n++) {
+              if (!b.length && n === a.length) continue;
+              choices.push([i, j, n]);
+            }
+          });
+        });
+        if (!choices.length) break;
+        const [i, j, n] = choices[Math.floor(random() * choices.length)];
+        game.bottles[j].push(...game.bottles[i].splice(-n)); previous = [i, j];
+      }
+      if (!solved()) break;
+    }
+    game.canPour = (i, j) => {
+      const a = game.bottles[i], b = game.bottles[j];
+      return !game.ended && i !== j && !!a?.length && !!b && b.length < capacity && (!b.length || b[b.length - 1] === a[a.length - 1]);
+    };
+    // Returns how many layers moved (0 when the pour is not allowed).
+    game.pour = (from, to) => {
+      if (!game.canPour(from, to)) return 0;
+      const a = game.bottles[from], b = game.bottles[to];
+      game.history.push(game.bottles.map(x => x.slice()));
+      const n = Math.min(run(a), capacity - b.length); b.push(...a.splice(-n)); game.moves++;
+      game.won = game.ended = solved(); return n;
+    };
+    game.undo = () => {
+      if (!game.history.length || game.ended || game.undos <= 0) return false;
+      const back = game.history.pop();
+      while (back.length < game.bottles.length) back.push([]);
+      game.bottles = back; game.moves--; game.undos--; return true;
+    };
+    game.addBottle = () => {
+      if (game.extra || game.ended) return false;
+      game.bottles.push([]); game.extra = true; return true;
+    };
+    game.done = i => { const b = game.bottles[i]; return b.length === capacity && b.every(c => c === b[0]); };
+    return game;
+  }
+
+  // Knife Hit: endless stages on a spinning log, every fifth a boss; the log changes speed, stops and turns back.
+  function newKnifeGame(random = Math.random, difficulty = 'normal') {
+    const cfg = ({ easy: [1.5, 5], normal: [2.1, 6], hard: [2.7, 7] })[difficulty] || [2.1, 6];
+    const tau = Math.PI * 2, norm = a => (a % tau + tau) % tau, gapTo = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+    const PATTERNS = ['steady', 'wobble', 'reverse', 'stopgo'];
+    const game = { stage: 0, score: 0, apples: 0, angle: 0, spin: 0, dir: 1, base: cfg[0], knives: [], fruit: [], remaining: 0, total: 0, flight: null, wait: 0,
+      time: 0, stageTime: 0, started: false, ended: false, won: false, boss: false, pattern: 'steady', hitAt: -9, appleAt: -9, brokeAt: -9, fail: null };
+    game.speedAt = t => {
+      const s = game.base * game.dir;
+      if (game.pattern === 'wobble') return s * (0.35 + 0.85 * (0.5 + 0.5 * Math.sin(t * 1.7)));
+      if (game.pattern === 'reverse') return s * Math.max(-1, Math.min(1, Math.sin(t * 1.25) * 2.2));
+      if (game.pattern === 'stopgo') return s * 1.5 * Math.pow(Math.max(0, Math.sin(t * 2.2)), 0.6);
+      if (game.pattern === 'boss') return s * 1.2 * Math.max(-1, Math.min(1, Math.sin(t * 0.9) * 3)) * (0.8 + 0.4 * Math.sin(t * 3.1));
+      return s;
+    };
+    const free = (list, gap) => { for (let k = 0; k < 40; k++) { const a = random() * tau; if (list.every(b => gapTo(a, b) > gap)) return a; } return null; };
+    game.next = () => {
+      game.stage++; game.boss = game.stage % 5 === 0; game.stageTime = 0; game.angle = random() * tau; game.dir = random() < 0.5 ? 1 : -1;
+      game.base = cfg[0] + Math.min(1.2, (game.stage - 1) * 0.08);
+      game.pattern = game.boss ? 'boss' : game.stage === 1 ? 'steady' : PATTERNS[Math.floor(random() * PATTERNS.length)];
+      game.total = game.remaining = Math.min(cfg[1] + Math.floor((game.stage - 1) / 2) + (game.boss ? 2 : 0), 11);
+      game.knives = [];
+      const pre = game.stage === 1 ? 0 : Math.min(4, Math.floor(random() * (2 + game.stage / 3)));
+      for (let i = 0; i < pre; i++) { const a = free(game.knives, 0.6); if (a != null) game.knives.push(a); }
+      game.fruit = [];
+      if (!game.boss && random() < 0.5) { const a = free(game.knives, 0.5); if (a != null) game.fruit.push(a); }
+      game.preset = game.knives.length; game.wait = 0; game.flight = null;
+    };
+    game.next();
+    game.throwKnife = () => {
+      if (game.ended || game.wait > 0 || game.flight != null || game.remaining <= 0) return false;
+      game.started = true; game.flight = 0; return true;
+    };
+    game.step = ms => {
+      let left = Math.max(0, Math.min(250, ms)) / 1000;
+      while (left > 0) {
+        const dt = Math.min(left, 1 / 120); left -= dt; game.time += dt;
+        if (game.ended) continue;
+        game.stageTime += dt; game.spin = game.speedAt(game.stageTime); game.angle = norm(game.angle + game.spin * dt);
+        if (game.wait > 0) { game.wait -= dt; if (game.wait <= 0) game.next(); continue; }
+        if (game.flight == null) continue;
+        game.flight += dt;
+        if (game.flight < 0.09) continue;
+        game.flight = null;
+        // The knife meets the log at its lowest point; in the log's own turn that is this angle.
+        const hit = norm(Math.PI / 2 - game.angle);
+        if (game.knives.some(a => gapTo(a, hit) < 0.15)) { game.ended = true; game.remaining--; game.fail = { t: game.time, side: game.spin >= 0 ? 1 : -1 }; break; }
+        const got = game.fruit.filter(a => gapTo(a, hit) < 0.26).length;
+        if (got) { game.fruit = game.fruit.filter(a => gapTo(a, hit) >= 0.26); game.apples += got; game.appleAt = game.time; }
+        game.knives.push(hit); game.remaining--; game.score++; game.hitAt = game.time;
+        if (!game.remaining) { game.wait = 1.1; game.brokeAt = game.time; }
+      }
+    };
+    return game;
+  }
+
+  // Count Masters: run a road, pick gates, lose men to walls, saws and enemy crowds, then climb the bonus stairs.
+  function newCountMastersGame(random = Math.random, difficulty = 'normal') {
+    const cfg = ({ easy: { start: 5, enemy: 0.35, bad: 0.3 }, normal: { start: 1, enemy: 0.5, bad: 0.45 }, hard: { start: 1, enemy: 0.65, bad: 0.6 } })[difficulty] || { start: 1, enemy: 0.5, bad: 0.45 };
+    const game = { x: 0, target: 0, direction: 0, count: cfg.start, z: 0, speed: 14, events: [], started: false, ended: false, won: false, score: 0, maxCount: 0,
+      note: '', noteTime: 0, noteGood: true, phase: 'run', fight: null, acc: 0, steps: 0, stairT: 0, mult: 1, finishCount: 0, time: 0, stepCost: 3, maxSteps: 30 };
+    let expect = cfg.start, z = 45;
+    for (const kind of ['gate', 'gate', 'block', 'gate', 'enemy', 'gate', 'saw', 'gate', 'gate', 'enemy', 'block', 'gate', 'enemy']) {
+      if (kind === 'gate') {
+        const good = expect >= 4 && random() < 0.35 ? { op: '*', v: random() < 0.75 ? 2 : 3 } : { op: '+', v: Math.max(3, Math.round(expect * (0.4 + random() * 0.6)) + Math.floor(random() * 8)) };
+        const other = random() < cfg.bad ? (expect > 6 && random() < 0.4 ? { op: '/', v: 2 } : { op: '-', v: Math.max(2, Math.round(expect * 0.3 + random() * 6)) })
+          : { op: '+', v: Math.max(2, Math.round(good.op === '+' ? good.v * 0.5 : expect * 0.6)) };
+        game.events.push({ z, type: 'gate', gates: random() < 0.5 ? [good, other] : [other, good] });
+        expect = good.op === '*' ? expect * good.v : expect + good.v;
+      } else if (kind === 'enemy') {
+        const v = Math.max(2, Math.round(expect * cfg.enemy)); game.events.push({ z, type: 'enemy', value: v, left: v }); expect -= v;
+      } else if (kind === 'block') {
+        const leftSide = random() < 0.5; game.events.push({ z, type: 'block', from: leftSide ? -1 : 0.08, to: leftSide ? -0.08 : 1 });
+      } else game.events.push({ z, type: 'saw', c: -0.5 + random(), amp: 0.35, phase: random() * 6, half: 0.26 });
+      z += 34 + random() * 6;
+    }
+    game.length = z + 15;
+    // Men stand in a sunflower: man i at radius 0.32·√i metres. The road is ±1 (±5 m).
+    game.man = i => { const r = 0.32 * Math.sqrt(i + 0.5), t = i * 2.39996; return { dx: r * Math.cos(t) / 5, dz: r * Math.sin(t) * 0.7 }; };
+    game.shown = () => Math.min(160, game.count);
+    game.radius = () => 0.32 * Math.sqrt(game.shown()) / 5;
+    game.sawAt = e => e.c + e.amp * Math.sin(game.time * 1.6 + e.phase);
+    game.start = () => { if (!game.ended) game.started = true; };
+    game.aim = x => { if (Number.isFinite(x)) game.target = Math.max(-1, Math.min(1, x)); };
+    game.move = d => { game.direction = Math.sign(d); };
+    const say = (text, good) => { game.note = text; game.noteGood = good; game.noteTime = 1; };
+    const cut = (from, to) => {
+      const n = game.shown(); let inside = 0;
+      for (let i = 0; i < n; i++) { const x = game.x + game.man(i).dx; if (x >= from && x <= to) inside++; }
+      const lost = n ? Math.round(game.count * inside / n) : 0;
+      if (lost) { game.count -= lost; say('−' + lost, false); }
+    };
+    const end = won => { game.ended = true; game.won = won; game.score = won ? Math.round(game.finishCount * game.mult) : 0; };
+    game.step = ms => {
+      if (!game.started || game.ended) return;
+      const dt = Math.max(0, Math.min(100, ms)) / 1000;
+      game.time += dt; game.noteTime = Math.max(0, game.noteTime - dt);
+      if (game.direction) game.target = Math.max(-1, Math.min(1, game.target + game.direction * dt * 1.8));
+      const lim = Math.max(0, 1 - game.radius() * 0.85);
+      game.x += (Math.max(-lim, Math.min(lim, game.target)) - game.x) * Math.min(1, dt * 12);
+      if (game.phase === 'run') {
+        game.z += game.speed * dt;
+        for (const e of game.events) {
+          if (e.done || e.z > game.z) continue;
+          e.done = true;
+          if (e.type === 'gate') {
+            const g = e.gates[game.x < 0 ? 0 : 1];
+            game.count = Math.max(0, Math.min(9999, g.op === '*' ? game.count * g.v : g.op === '/' ? Math.ceil(game.count / g.v) : g.op === '-' ? game.count - g.v : game.count + g.v));
+            say((g.op === '*' ? '×' : g.op === '/' ? '÷' : g.op === '-' ? '−' : '+') + g.v, g.op === '*' || g.op === '+');
+          } else if (e.type === 'block') cut(e.from, e.to);
+          else if (e.type === 'saw') { const c = game.sawAt(e); cut(c - e.half, c + e.half); }
+          else if (e.type === 'enemy') { game.phase = 'fight'; game.fight = e; game.acc = 0; game.rate = Math.max(game.count, e.left) / 0.9; }
+          if (game.phase !== 'run') break;
+        }
+        if (game.phase === 'run' && game.z >= game.length) { game.phase = 'stairs'; game.finishCount = game.count; game.stairT = 0; }
+      } else if (game.phase === 'fight') {
+        const e = game.fight; game.acc += game.rate * dt;
+        const k = Math.min(Math.floor(game.acc), game.count, e.left); game.acc -= Math.floor(game.acc);
+        game.count -= k; e.left -= k;
+        if (!e.left && game.count) { game.phase = 'run'; game.fight = null; }
+      } else if (game.phase === 'stairs') {
+        game.stairT += dt;
+        while (game.stairT >= 0.16 && !game.ended) {
+          game.stairT -= 0.16;
+          if (game.count > game.stepCost && game.steps < game.maxSteps) { game.count -= game.stepCost; game.steps++; game.mult = 1 + game.steps * 0.1; }
+          else end(true);
+        }
+      }
+      game.maxCount = Math.max(game.maxCount, game.count);
+      if (!game.count && !game.ended && game.phase !== 'stairs') end(false);
+    };
+    return game;
+  }
+
+  // Candy Crush: swap neighbours to line up three or more; four make a striped candy, an L or T a wrapped one, five a colour bomb.
+  // Each level has a target score and a move budget; leftover moves become striped candies at the end (sugar crush).
+  // The board settles one event at a time (settle()), so the view can animate every clear and every fall.
+  function newCandyGame(random = Math.random, difficulty = 'normal', level = 1) {
+    const cfg = ({ easy: { colors: 5, moves: 25 }, normal: { colors: 6, moves: 20 }, hard: { colors: 6, moves: 16 } })[difficulty] || { colors: 6, moves: 20 };
+    const R = 8, C = 8;
+    const game = { rows: R, cols: C, colors: cfg.colors, level, difficulty, moves: cfg.moves, target: Math.round((1000 + (level - 1) * 350) / 10) * 10,
+      score: 0, grid: [], phase: 'idle', pending: null, cascade: 0, sugar: false, ended: false, won: false, nextId: 1, swaps: 0 };
+    const make = (color, kind = 'n') => ({ id: game.nextId++, color, kind });
+    const at = (r, c) => r >= 0 && r < R && c >= 0 && c < C ? game.grid[r][c] : null;
+    const runs = () => {
+      const out = [];
+      for (let r = 0; r < R; r++) for (let c = 0; c < C;) {
+        const a = at(r, c); let n = 1;
+        while (a && a.kind !== 'b' && c + n < C && at(r, c + n) && at(r, c + n).kind !== 'b' && at(r, c + n).color === a.color) n++;
+        if (a && a.kind !== 'b' && n >= 3) out.push({ dir: 'h', cells: Array.from({ length: n }, (_, k) => [r, c + k]) });
+        c += n;
+      }
+      for (let c = 0; c < C; c++) for (let r = 0; r < R;) {
+        const a = at(r, c); let n = 1;
+        while (a && a.kind !== 'b' && r + n < R && at(r + n, c) && at(r + n, c).kind !== 'b' && at(r + n, c).color === a.color) n++;
+        if (a && a.kind !== 'b' && n >= 3) out.push({ dir: 'v', cells: Array.from({ length: n }, (_, k) => [r + k, c]) });
+        r += n;
+      }
+      return out;
+    };
+    const swapCells = (a, b) => { const t = game.grid[a[0]][a[1]]; game.grid[a[0]][a[1]] = game.grid[b[0]][b[1]]; game.grid[b[0]][b[1]] = t; };
+    const adjacent = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) === 1;
+    const legal = (a, b) => {
+      const x = at(...a), y = at(...b);
+      if (!x || !y) return false;
+      if (x.kind === 'b' || y.kind === 'b' || x.kind !== 'n' && y.kind !== 'n') return true;
+      swapCells(a, b); const ok = runs().length > 0; swapCells(a, b); return ok;
+    };
+    game.hint = () => {
+      for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) for (const [dr, dc] of [[0, 1], [1, 0]]) {
+        if (r + dr < R && c + dc < C && legal([r, c], [r + dr, c + dc])) return [[r, c], [r + dr, c + dc]];
+      }
+      return null;
+    };
+    const fill = () => {
+      for (let tries = 0; tries < 200; tries++) {
+        game.grid = Array.from({ length: R }, () => Array(C).fill(null));
+        for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+          let color;
+          do color = Math.floor(random() * game.colors);
+          while (c >= 2 && at(r, c - 1).color === color && at(r, c - 2).color === color || r >= 2 && at(r - 1, c).color === color && at(r - 2, c).color === color);
+          game.grid[r][c] = make(color);
+        }
+        if (game.hint()) return;
+      }
+    };
+    fill();
+    // Mix the candies (keeping specials) until there is a move and nothing is already lined up.
+    const shuffle = () => {
+      const all = game.grid.flat();
+      for (let tries = 0; tries < 300; tries++) {
+        for (let i = all.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [all[i], all[j]] = [all[j], all[i]]; }
+        for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) game.grid[r][c] = all[r * C + c];
+        if (!runs().length && game.hint()) return;
+      }
+      fill();
+    };
+    game.trySwap = (a, b) => {
+      if (game.phase !== 'idle' || game.ended || !adjacent(a, b) || !at(...a) || !at(...b)) return 'no';
+      if (!legal(a, b)) return 'bad';
+      swapCells(a, b); game.moves--; game.swaps++; game.cascade = 0; game.pending = { a, b }; game.phase = 'busy';
+      return 'ok';
+    };
+    // Clear cells; a special candy that is cleared fires too. Returns the cleared candies with their places.
+    const blast = (start, keep = new Set()) => {
+      const seen = new Set(), queue = [...start], out = [];
+      const add = (r, c) => { if (r >= 0 && r < R && c >= 0 && c < C && !keep.has(r * C + c)) queue.push([r, c]); };
+      while (queue.length) {
+        const [r, c] = queue.shift(), key = r * C + c;
+        if (seen.has(key)) continue;
+        const k = at(r, c); if (!k) continue;
+        seen.add(key); out.push({ r, c, ...k });
+        if (k.kind === 'h') for (let x = 0; x < C; x++) add(r, x);
+        else if (k.kind === 'v') for (let y = 0; y < R; y++) add(y, c);
+        else if (k.kind === 'w') { for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) add(r + y, c + x); }
+        else if (k.kind === 'b') {
+          const colors = game.grid.flat().filter(q => q && q.kind !== 'b').map(q => q.color), pick = colors[Math.floor(random() * colors.length)];
+          for (let y = 0; y < R; y++) for (let x = 0; x < C; x++) if (at(y, x) && at(y, x).color === pick) add(y, x);
+        }
+      }
+      for (const o of out) game.grid[o.r][o.c] = null;
+      return out;
+    };
+    const points = n => { game.cascade++; const p = n * 20 * game.cascade; game.score += p; return p; };
+    const combo = (a, b) => {
+      const x = at(...a), y = at(...b), cells = [];
+      const box = (r0, c0, h) => { for (let r = r0 - h; r <= r0 + h; r++) for (let c = c0 - h; c <= c0 + h; c++) if (at(r, c)) cells.push([r, c]); };
+      const kinds = [x.kind, y.kind];
+      if (x.kind === 'b' && y.kind === 'b') { for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) cells.push([r, c]); }
+      else if (x.kind === 'b' || y.kind === 'b') {
+        const bomb = x.kind === 'b' ? b : a, other = x.kind === 'b' ? y : x;
+        const bombCandy = at(...bomb); game.grid[bomb[0]][bomb[1]] = null; cells.length = 0;
+        for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+          const q = at(r, c);
+          if (q && q.kind !== 'b' && q.color === other.color) { if (other.kind === 'h' || other.kind === 'v') q.kind = random() < 0.5 ? 'h' : 'v'; else if (other.kind === 'w') q.kind = 'w'; cells.push([r, c]); }
+        }
+        const out = blast(cells); out.push({ r: bomb[0], c: bomb[1], ...bombCandy }); return { cleared: out, extra: 1 };
+      } else if (kinds.includes('w') && kinds.some(k => k === 'h' || k === 'v')) {
+        x.kind = y.kind = 'n';
+        for (let d = -1; d <= 1; d++) { for (let c = 0; c < C; c++) cells.push([b[0] + d, c]); for (let r = 0; r < R; r++) cells.push([r, b[1] + d]); }
+      } else if (x.kind === 'w' && y.kind === 'w') { x.kind = y.kind = 'n'; box(b[0], b[1], 2); }
+      else { x.kind = y.kind = 'n'; for (let c = 0; c < C; c++) cells.push([b[0], c]); for (let r = 0; r < R; r++) cells.push([r, b[1]]); }
+      return { cleared: blast(cells.filter(([r, c]) => r >= 0 && r < R && c >= 0 && c < C)), extra: 0 };
+    };
+    // One step of settling: a swap combo, a round of matches, a fall, the end-of-level sugar crush, or done.
+    game.settle = () => {
+      if (game.phase !== 'busy') return { type: 'idle' };
+      const p = game.pending; game.pending = null;
+      if (p) {
+        const x = at(...p.a), y = at(...p.b);
+        if (x && y && (x.kind === 'b' || y.kind === 'b' || x.kind !== 'n' && y.kind !== 'n')) {
+          const { cleared } = combo(p.a, p.b);
+          return { type: 'clear', cleared, created: [], points: points(cleared.length) + 300, combo: true };
+        }
+      }
+      const found = runs();
+      if (found.length) {
+        // Join runs that share a cell (L and T shapes) and decide which special each group makes.
+        const groups = [];
+        for (const run of found) {
+          const keys = new Set(run.cells.map(([r, c]) => r * C + c));
+          const hit = groups.filter(g => [...keys].some(k => g.keys.has(k)));
+          const g = { runs: [run], keys };
+          for (const h of hit) { h.runs.forEach(x => g.runs.push(x)); h.keys.forEach(k => g.keys.add(k)); groups.splice(groups.indexOf(h), 1); }
+          groups.push(g);
+        }
+        const keep = new Set(), created = [];
+        let bonus = 0;
+        for (const g of groups) {
+          const longest = Math.max(...g.runs.map(r => r.cells.length)), both = g.runs.some(r => r.dir === 'h') && g.runs.some(r => r.dir === 'v');
+          const kind = longest >= 5 ? 'b' : both ? 'w' : longest === 4 ? (g.runs[0].dir === 'h' ? 'v' : 'h') : null;
+          if (!kind) continue;
+          const cells = [...g.keys], moved = p ? [p.a, p.b].map(([r, c]) => r * C + c).find(k => g.keys.has(k)) : undefined;
+          const spot = moved ?? (both ? [...g.keys].find(k => g.runs.filter(r => r.cells.some(([y, x]) => y * C + x === k)).length > 1) : cells[Math.floor(cells.length / 2)]) ?? cells[0];
+          const old = game.grid[Math.floor(spot / C)][spot % C];
+          keep.add(spot); created.push({ r: Math.floor(spot / C), c: spot % C, kind, color: old.color, fired: old.kind !== 'n' ? old.kind : null });
+          bonus += kind === 'b' ? 200 : kind === 'w' ? 120 : 60;
+        }
+        const start = groups.flatMap(g => [...g.keys]).filter(k => !keep.has(k)).map(k => [Math.floor(k / C), k % C]);
+        // A special that is consumed into a new special still fires.
+        for (const cr of created) if (cr.fired) start.push([cr.r, cr.c]);
+        const createdSpots = new Set(created.filter(cr => !cr.fired).map(cr => cr.r * C + cr.c));
+        const cleared = blast(start, createdSpots);
+        for (const cr of created) {
+          const q = game.grid[cr.r][cr.c];
+          if (q && !cr.fired) { q.kind = cr.kind; if (cr.kind === 'b') q.color = -1; cr.id = q.id; }
+          else if (!q) { const n = make(cr.kind === 'b' ? -1 : cr.color, cr.kind); game.grid[cr.r][cr.c] = n; cr.id = n.id; }
+          else cr.id = q.id;
+        }
+        game.score += bonus;
+        return { type: 'clear', cleared, created, points: points(cleared.length) + bonus };
+      }
+      // Gravity: candies drop to fill gaps; new ones come in from the top.
+      const spawned = [], fell = [];
+      for (let c = 0; c < C; c++) {
+        let w = R - 1;
+        for (let r = R - 1; r >= 0; r--) if (game.grid[r][c]) { if (w !== r) { game.grid[w][c] = game.grid[r][c]; game.grid[r][c] = null; fell.push(game.grid[w][c].id); } w--; }
+        for (let r = w, k = 0; r >= 0; r--, k++) { game.grid[r][c] = make(Math.floor(random() * game.colors)); spawned.push({ id: game.grid[r][c].id, r, c, above: w + 1 }); }
+      }
+      if (spawned.length || fell.length) return { type: 'fall', spawned, fell };
+      // The board is still. End of level, sugar crush, or back to the player.
+      if (game.score >= game.target && game.moves > 0) {
+        const normal = []; for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) if (at(r, c).kind === 'n') normal.push([r, c]);
+        const [r, c] = normal[Math.floor(random() * normal.length)] || [0, 0];
+        at(r, c).kind = random() < 0.5 ? 'h' : 'v'; game.moves--; game.sugar = true; game.score += 100;
+        return { type: 'sugar', r, c, id: at(r, c).id };
+      }
+      if (game.sugar) {
+        const specials = []; for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) if (at(r, c).kind !== 'n') specials.push([r, c]);
+        if (specials.length) { game.cascade = 0; const cleared = blast(specials); return { type: 'clear', cleared, created: [], points: points(cleared.length) }; }
+      }
+      if (game.score >= game.target) { game.phase = 'won'; game.ended = game.won = true; return { type: 'won' }; }
+      if (game.moves <= 0) { game.phase = 'lost'; game.ended = true; return { type: 'lost' }; }
+      game.phase = 'idle';
+      if (!game.hint()) { shuffle(); return { type: 'shuffle' }; }
+      return { type: 'ready' };
+    };
+    game.stars = () => game.score >= game.target * 2 ? 3 : game.score >= game.target * 1.5 ? 2 : game.score >= game.target ? 1 : 0;
+    return game;
+  }
+
   function writingLoad(h) {
     if (!h) return false;
     // A story fetch/entry is not generation. The Forge screen also covers image generation after text is ready.
@@ -983,15 +1424,20 @@
       pop: { name: '초코칩 터뜨리기', tab: '초코칩', icon: '🍫', level: 'normal', levels: [['easy', '쉬움', '8×6 · 3색'], ['normal', '보통', '10×8 · 4색'], ['hard', '어려움', '12×9 · 5색']], make: (lv) => newPopGame(Math.random, lv) },
       slide: { name: '꽃밭 퍼즐', icon: '🌸', level: 'easy', levels: [['easy', '쉬움', '3×3'], ['normal', '보통', '4×4'], ['hard', '어려움', '5×5']], make: (lv) => newSlideGame(Math.random, lv) },
       lights: { name: '별 밝히기', icon: '🌟', level: 'normal', levels: [['easy', '쉬움', '4×4'], ['normal', '보통', '5×5'], ['hard', '어려움', '6×6']], make: (lv) => newLightsGame(Math.random, lv) },
+      candy: { name: '캔디 크러시', tab: '캔디', icon: '🍭', level: 'normal', ownSfx: true, levels: [['easy', '쉬움', '5색 · 이동 25번'], ['normal', '보통', '6색 · 이동 20번'], ['hard', '어려움', '6색 · 이동 16번']], make: lv => newCandyGame(Math.random, lv) },
+      water: { name: '물 색깔 정리', tab: '물 정리', icon: '🧪', level: 'normal', ownSfx: true, levels: [['easy', '쉬움', '3색부터 · 레벨마다 늘어남'], ['normal', '보통', '4색부터 · 레벨마다 늘어남'], ['hard', '어려움', '6색부터 · 최대 10색']], make: lv => newWaterSortGame(Math.random, lv) },
+      knife: { name: '칼 던지기', tab: '칼 던지기', icon: '🔪', level: 'normal', ownSfx: true, levels: [['easy', '쉬움', '느리게 돌아요 · 칼 5개부터'], ['normal', '보통', '칼 6개부터 · 5판마다 보스'], ['hard', '어려움', '빠르게 돌아요 · 칼 7개부터']], make: lv => newKnifeGame(Math.random, lv) },
+      count: { name: '인원 모으기', tab: '인원 모으기', icon: '🏃', level: 'normal', ownSfx: true, levels: [['easy', '쉬움', '5명 출발 · 적 무리 작게'], ['normal', '보통', '1명 출발'], ['hard', '어려움', '1명 출발 · 나쁜 문과 적 많이']], make: lv => newCountMastersGame(Math.random, lv) },
+      dino: { name: '공룡 달리기', tab: '공룡', icon: '🦖', level: 'normal', ownSfx: true, hidden: true, levels: [['easy', '쉬움', '천천히 · 최고 속도 낮게'], ['normal', '보통', '크롬 공룡과 같은 속도'], ['hard', '어려움', '빠르게 시작 · 빨리 빨라짐']], make: lv => newDinoGame(Math.random, lv) },
     };
     const fresh = (which) => ({ game: GAMES[which].make(GAMES[which].level), level: GAMES[which].level, started: 0, stopped: 0, hints: 3, recorded: false, hideResult: false });
     const states = {};
-    let mode = '', flagMode = false, anchor = null, pointer = null, moved = false, end = null, paintNow = null;
+    let eggTaps = 0, eggLast = 0, mode = '', flagMode = false, anchor = null, pointer = null, moved = false, end = null, paintNow = null;
     // Timers of the game on screen (the cookie oven, the recipe playback, the pinball frame); cleared when it changes or
     // closes. A game that runs on the clock pauses then (st.pause).
-    let live = 0, frame = 0, timers = [];
+    let live = 0, frame = 0, timers = [], panelStopped = false;
     const stopTimers = () => { clearInterval(live); live = 0; cancelAnimationFrame(frame); frame = 0; timers.forEach(clearTimeout); timers = []; if (mode) states[mode]?.pause?.(); };
-    const tabs = Object.entries(GAMES).map(([key, g]) => {
+    const tabs = Object.entries(GAMES).filter(([, g]) => !g.hidden).map(([key, g]) => {
       const b = button('', () => show(key), 'gfx-game-tab');
       const icon = el('i', '', g.icon); icon.setAttribute('aria-hidden', 'true');
       b.append(icon, el('span', '', g.tab || g.name)); b.dataset.game = key; b.setAttribute('aria-label', g.name); b.setAttribute('aria-pressed', 'false');
@@ -1089,6 +1535,7 @@
       // Once a second: follow a UI style picked meanwhile, and keep 크게 보기 in the top layer.
       if (++beat % 4 === 0) { retheme(); if (overlay.hasAttribute('data-game-large')) topLayer(true); }
     }, 250);
+    panel.dispose = () => { panelStopped = true; clearInterval(tick); stopTimers(); };
     /* Sound for every game: each frame the game on screen is compared with the last frame (points, rows, hearts,
      * cells opened, the end), and what changed is heard; a strong hit also bumps the board. A game that plays its
      * own sounds (ownSfx) is left to itself. */
@@ -1114,7 +1561,7 @@
     };
     let heard = null;
     const listen = () => {
-      if (life.signal.aborted) return;
+      if (life.signal.aborted || panelStopped) return;
       requestAnimationFrame(listen);
       if (!panel.isConnected || document.hidden || !mode || GAMES[mode]?.ownSfx) { heard = null; return; }
       const g = states[mode]?.game; if (!g) return;
@@ -1147,16 +1594,21 @@
       content.dataset.kind = mode;
       const head = el('div', 'gfx-game-head'), title = el('b', 'gfx-game-title'), stats = el('div', 'gfx-game-stats');
       const titleIcon = el('i', '', g.icon); titleIcon.setAttribute('aria-hidden', 'true');
+      // Easter egg: tap a game's icon five times quickly for the hidden offline T-Rex.
+      on(titleIcon, 'click', () => {
+        const now = performance.now(); eggTaps = now - eggLast < 600 ? eggTaps + 1 : 1; eggLast = now;
+        if (eggTaps >= 5 && mode !== 'dino') { eggTaps = 0; sfx.play('level'); show('dino'); }
+      });
       title.append(titleIcon, el('span', '', g.name));
       const tools = el('div', 'gfx-game-tools'), levels = el('div', 'gfx-game-levels');
       levels.setAttribute('role', 'radiogroup'); levels.setAttribute('aria-label', '난이도 (바꾸면 새 판)');
       for (const [value, label, detail] of g.levels) {
-        const b = button(label, () => { if (st.level === value) return; g.level = value; states[mode] = fresh(mode); show(mode); });
+        const b = button(label, () => { if (st.level === value) return; stopTimers(); g.level = value; states[mode] = fresh(mode); show(mode); });
         // One short word per level; the board size or time is in its tooltip and accessible name.
         b.title = detail; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(st.level === value)); b.setAttribute('aria-label', label + ' ' + detail);
         levels.append(b);
       }
-      const renew = () => { states[mode] = fresh(mode); show(mode); };
+      const renew = () => { stopTimers(); states[mode] = fresh(mode); show(mode); };
       tools.append(levels, button('새 판', renew, 'gfx-game-new'));
       const info = el('div', 'gfx-game-info'), stage = el('div', 'gfx-game-stage'), board = el('div', 'gfx-game-board'), result = el('div', 'gfx-game-result');
       info.setAttribute('aria-live', 'polite'); result.hidden = true;
@@ -2128,10 +2580,669 @@
           if (game.ended) showResult('모든 별 반짝!', game.moves + '번 만에');
         };
       }
+      if (['dino', 'water', 'candy', 'knife', 'count'].includes(mode)) {
+        const kind = mode;
+        const [W, H] = ({ dino: [600, 170], water: [360, 460], candy: [360, 452], knife: [360, 520], count: [360, 560] })[kind];
+        board.style.setProperty('--fit', String(W / (H + (kind === 'dino' ? 70 : 0))));
+        const canvas = el('canvas', 'gfx-arcade-canvas'), ctx = canvas.getContext('2d');
+        canvas.style.aspectRatio = W + '/' + H;
+        canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', g.name + ' 게임 화면');
+        board.tabIndex = 0; board.setAttribute('role', 'application'); board.setAttribute('aria-label', g.name);
+        board.append(canvas);
+        const focus = () => board.focus({ preventScroll: true });
+        const toWorld = e => { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }; };
+        const inputLife = new AbortController();
+        let paintExtra = () => {}, release = () => {}, drawGame = () => {}, onStep = () => {}, sign = () => '', keyDown = () => {}, keyUp = () => {};
+        st.pause = () => { release(); inputLife.abort(); };
+        const KEYS = [' ', 'enter', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'];
+        on(board, 'keydown', e => { const k = e.key.toLowerCase(); if (!KEYS.includes(k)) return; e.preventDefault(); keyDown(k, e.repeat); });
+        on(board, 'keyup', e => { const k = e.key.toLowerCase(); if (KEYS.includes(k)) keyUp(k); });
+        on(board, 'blur', () => release());
+        window.addEventListener('blur', () => release(), { signal: inputLife.signal });
+        const font = (size, weight = 'bold') => weight + ' ' + size + 'px "Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
+        const label = (text, x, y, size, color, align = 'center', f) => { ctx.font = f || font(size); ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillStyle = color; ctx.fillText(text, x, y); };
+        const fill = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+        const disc = (x, y, r, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); };
+        const ease = p => p < 0 ? 0 : p > 1 ? 1 : p * p * (3 - 2 * p);
+        const lerp = (a, b, p) => a + (b - a) * p;
+
+        if (kind === 'dino') {
+          // Chrome's offline T-Rex: grey pixel sprites on white, the colours swap every 700 points.
+          const GROUND = 150, CELL = 2;
+          const BODY = ['............########..', '...........##.#######.', '...........##########.', '...........##########.', '...........##########.', '...........#####......',
+            '...........########...', '#.........#####.......', '#.......#######.......', '##.....##########.....', '###...###########.....', '#############..#......', '.############.........',
+            '..###########.........', '...#########..........', '....#######...........', '.....#####............'];
+          const LEGS = { still: ['.....##.##', '.....#...#', '.....#...#', '.....##..##'], a: ['.....##.##', '.....#...##', '.....#....', '.....##...'], b: ['.....##.##', '.....##..#', '.........#', '.........##'] };
+          const DUCK = ['.................##########...', '#...............##.#########..', '##.......#################....', '############################..', '.#####################........',
+            '..###############.............', '...############...............', '....##########................'];
+          const pixels = (rows, x, top, color, dx = 0) => { ctx.fillStyle = color; rows.forEach((row, r) => { for (let c = 0; c < row.length; c++) if (row[c] === '#') ctx.fillRect(x + (c + dx) * CELL, top + r * CELL, CELL, CELL); }); };
+          const BUMPS = Array.from({ length: 34 }, (_, i) => ({ x: (i * 197) % 1200, w: 1 + (i * 7) % 5, y: 3 + (i * 5) % 9, up: i % 9 === 0 }));
+          let endedWall = 0, lastHundreds = 0;
+          const pad = el('div', 'gfx-arcade-pad'); board.append(pad);
+          const restart = () => { if (performance.now() - endedWall > 450) renew(); };
+          const press = () => { if (game.ended) return restart(); if (game.jump()) { begin(); sfx.play('tap'); } focus(); };
+          const hold = (text, down, up) => {
+            const b = button(text, () => {});
+            on(b, 'pointerdown', e => { e.preventDefault(); b.setPointerCapture?.(e.pointerId); b.dataset.held = ''; down(); focus(); });
+            for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) on(b, ev, () => { delete b.dataset.held; up(); });
+            return b;
+          };
+          pad.append(hold('▲ 점프', press, () => game.release()), hold('▼ 숙이기', () => { if (!game.ended) { game.duck(true); begin(); } }, () => game.duck(false)));
+          on(canvas, 'pointerdown', e => { e.preventDefault(); press(); });
+          for (const ev of ['pointerup', 'pointercancel']) on(canvas, ev, () => game.release());
+          release = () => { game.release(); game.duck(false); };
+          keyDown = (k, repeat) => {
+            if (k === 'arrowdown' || k === 's') { if (!game.ended) { game.duck(true); begin(); } }
+            else if ([' ', 'enter', 'arrowup', 'w'].includes(k) && !repeat) press();
+          };
+          keyUp = k => { if (k === 'arrowdown' || k === 's') game.duck(false); else game.release(); };
+          onStep = dt => {
+            game.step(dt);
+            if (game.hundreds > lastHundreds) { lastHundreds = game.hundreds; sfx.play('level'); }
+            if (game.ended && !endedWall) { endedWall = performance.now(); sfx.play('lose'); navigator.vibrate?.(40); finish(false, game.score); }
+          };
+          sign = () => [game.ended, game.started, Math.floor(game.score / 100)].join('/');
+          drawGame = () => {
+            const dark = (panel.dataset.theme === 'night') !== (Math.floor(game.score / 700) % 2 === 1);
+            const bg = dark ? '#202124' : '#f7f7f7', ink = dark ? '#d1d1d1' : '#535353', cloud = dark ? '#3c4043' : '#dcdcdc';
+            fill(0, 0, W, H, bg);
+            if (dark) for (let i = 0; i < 9; i++) fill(((i * 131 - game.distance * 0.05) % W + W) % W, 18 + (i * 37) % 70, 2, 2, cloud);
+            for (let i = 0; i < 3; i++) {
+              const x = ((i * 230 + 120 - game.distance * 0.2) % 760 + 760) % 760 - 80, y = 34 + (i * 23) % 50;
+              fill(x + 12, y, 18, 3, cloud); fill(x + 6, y + 3, 30, 4, cloud); fill(x, y + 7, 46, 5, cloud);
+            }
+            fill(0, GROUND - 2, W, 1, ink);
+            for (const tile of [0, 1200]) for (const b of BUMPS) {
+              const x = ((b.x + tile - game.distance) % 2400 + 2400) % 2400 - 600;
+              if (x < -10 || x > W) continue;
+              if (b.up) fill(x, GROUND - 4, 6, 2, ink); else fill(x, GROUND - 2 + b.y, b.w, 1, ink);
+            }
+            for (const o of game.obstacles) {
+              if (o.kind === 'ptero') {
+                const x = Math.round(o.x), top = GROUND - o.y - o.h, up = Math.floor(game.time * 6 + o.seed) % 2 === 0;
+                ctx.fillStyle = ink;
+                fill(x + 12, top + 18, 26, 6, ink); fill(x + 4, top + 14, 12, 7, ink); fill(x + 9, top + 11, 6, 3, ink);
+                ctx.beginPath(); ctx.moveTo(x, top + 18); ctx.lineTo(x + 5, top + 15); ctx.lineTo(x + 5, top + 20); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(x + 37, top + 18); ctx.lineTo(x + 46, top + 17); ctx.lineTo(x + 37, top + 24); ctx.fill();
+                ctx.beginPath();
+                if (up) { ctx.moveTo(x + 16, top + 18); ctx.lineTo(x + 22, top + 1); ctx.lineTo(x + 30, top + 1); ctx.lineTo(x + 30, top + 18); }
+                else { ctx.moveTo(x + 16, top + 24); ctx.lineTo(x + 30, top + 24); ctx.lineTo(x + 30, top + 39); ctx.lineTo(x + 23, top + 39); }
+                ctx.fill(); fill(x + 8, top + 15, 2, 2, bg);
+              } else {
+                const unit = o.w / o.size;
+                for (let k = 0; k < o.size; k++) {
+                  const x = Math.round(o.x + k * unit), w = unit, h = o.h - (k % 2) * (o.kind === 'large' ? 6 : 4), base = GROUND + 1, top = base - h;
+                  const tw = Math.round(w * 0.36), tx = Math.round(x + (w - tw) / 2), aw = Math.max(3, Math.round(w * 0.2));
+                  fill(tx, top + 2, tw, h - 2, ink); fill(tx + 1, top, tw - 2, 2, ink);
+                  fill(x + 1, base - h * 0.74, aw, h * 0.3, ink); fill(x + 1, base - h * 0.48, tx - x - 1, aw, ink);
+                  fill(x + w - aw - 1, base - h * 0.84, aw, h * 0.3, ink); fill(tx + tw, base - h * 0.58, x + w - aw - 1 - tx - tw + aw, aw, ink);
+                  fill(tx + 2, top + 6, 1, 2, bg); fill(tx + tw - 3, top + 14, 1, 2, bg);
+                }
+              }
+            }
+            const feet = GROUND - Math.round(game.y), running = game.started && !game.ended && game.y === 0;
+            const legs = running ? (Math.floor(game.distance / 36) % 2 ? LEGS.a : LEGS.b) : LEGS.still;
+            if (game.ducking && game.y === 0 && !game.ended) { pixels(DUCK, game.x, feet - 24, ink); pixels(legs, game.x, feet - 8, ink, 2); }
+            else {
+              pixels(BODY, game.x, feet - 42, ink); pixels(legs, game.x, feet - 8, ink);
+              if (game.ended) { fill(game.x + 24, feet - 42, 6, 6, bg); fill(game.x + 26, feet - 40, 2, 2, ink); }
+            }
+            const pad5 = n => String(Math.min(99999, n)).padStart(5, '0'), hi = best();
+            const blink = game.flash > 0 && Math.floor(game.flash * 8) % 2 === 0;
+            const shown = game.flash > 0 ? game.hundreds * 100 : game.score;
+            label((hi != null ? 'HI ' + pad5(hi) + '  ' : '') + (blink ? '' : pad5(shown)), W - 12, 20, 13, ink, 'right', 'bold 13px "Courier New", monospace');
+            if (!game.started) label('스페이스 · 탭으로 시작', W / 2, 68, 13, ink, 'center', font(13, 'normal'));
+            if (game.ended) {
+              label('G A M E   O V E R', W / 2, 58, 16, ink, 'center', 'bold 16px "Courier New", monospace');
+              ctx.strokeStyle = ink; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(W / 2, 94, 11, -0.4 * Math.PI, 1.35 * Math.PI); ctx.stroke();
+              ctx.fillStyle = ink; ctx.beginPath(); ctx.moveTo(W / 2 + 3, 79); ctx.lineTo(W / 2 + 12, 85); ctx.lineTo(W / 2 + 2, 89); ctx.fill();
+            }
+          };
+        } else if (kind === 'water') {
+          // Water Sort Puzzle: glass tubes on a dark backdrop; the picked tube lifts, flies over the other, tips and pours.
+          const COLORS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#8e24aa', '#fb8c00', '#ec407a', '#4dd0e1', '#9ccc65', '#6d4c41'];
+          const NAMES = ['빨강', '파랑', '초록', '노랑', '보라', '주황', '분홍', '하늘', '연두', '갈색'];
+          const TW = 34, LH = 26, TH = LH * 4 + 26, DUR = 820;
+          let sel = -1, msg = '', anim = null, clearedSaved = false;
+          const doneAt = {};
+          const layout = () => {
+            const n = game.bottles.length, rows = n > 6 ? 2 : 1, per = Math.ceil(n / rows);
+            return game.bottles.map((_, i) => {
+              const r = Math.floor(i / per), c = i % per, inRow = r === rows - 1 ? n - per * (rows - 1) : per, gap = (W - inRow * TW) / (inRow + 1);
+              const bottom = rows === 1 ? 345 : r ? 425 : 250;
+              return { x: gap + c * (TW + gap), top: bottom - TH, bottom };
+            });
+          };
+          const nextLevel = level => { st.game = newWaterSortGame(Math.random, st.level, level); st.started = 0; st.stopped = 0; st.recorded = false; st.newBest = false; show(mode); };
+          const undo = button('↶ 되돌리기', () => { if (anim) return; if (game.undo()) { sel = -1; msg = ''; sfx.play('move'); paint(); } });
+          const add = button('+ 빈 병', () => { if (anim) return; if (game.addBottle()) { sel = -1; sfx.play('pop'); paint(); } });
+          const again = button('⟲ 이 레벨 다시', () => nextLevel(game.level));
+          tools.append(undo, add, again);
+          const tap = p => {
+            if (anim) return;
+            if (game.won) return nextLevel(game.level + 1);
+            const L = layout(), i = L.findIndex(b => p.x >= b.x - 10 && p.x <= b.x + TW + 10 && p.y >= b.top - 34 && p.y <= b.bottom + 14);
+            msg = '';
+            if (i < 0) { sel = -1; return; }
+            if (sel < 0) { if (game.bottles[i].length && !game.done(i)) { sel = i; sfx.play('tap'); } else sfx.play('nope'); return; }
+            if (sel === i) { sel = -1; return; }
+            const from = game.bottles[sel], color = from[from.length - 1], n = game.pour(sel, i);
+            if (n) { begin(); anim = { from: sel, to: i, n, color, t0: performance.now(), poured: false }; sel = -1; }
+            else { sfx.play('nope'); msg = '같은 색 위나 빈 병에만 부을 수 있어요'; sel = game.bottles[i].length && !game.done(i) ? i : -1; }
+          };
+          on(canvas, 'pointerdown', e => { e.preventDefault(); tap(toWorld(e)); focus(); });
+          keyDown = k => { if ((k === ' ' || k === 'enter') && game.won && !anim) nextLevel(game.level + 1); };
+          onStep = () => {
+            if (!anim) return;
+            const p = (performance.now() - anim.t0) / DUR;
+            if (p > 0.25 && !anim.poured) { anim.poured = true; sfx.play('pop', 2); }
+            if (p >= 1) {
+              const to = anim.to; anim = null;
+              if (game.done(to)) { doneAt[to] = performance.now(); sfx.play('match'); }
+              if (game.won && !clearedSaved) {
+                clearedSaved = true; sfx.play('win');
+                st.newBest = saveGameBest(mode + '-' + st.level, game.level, false);
+              }
+              paint();
+            }
+          };
+          sign = () => [game.moves, game.undos, game.extra, game.won, !!anim, msg].join('/');
+          const tubePath = (x, top, bottom, inset = 0) => {
+            const r = TW / 2 - inset;
+            ctx.beginPath(); ctx.moveTo(x + inset, top); ctx.lineTo(x + inset, bottom - TW / 2);
+            ctx.arc(x + TW / 2, bottom - TW / 2, r, Math.PI, 0, true); ctx.lineTo(x + TW - inset, top);
+          };
+          const drawTube = (x, top, bottom, layers, glow) => {
+            ctx.save(); tubePath(x, top - 2, bottom, 3); ctx.closePath(); ctx.clip();
+            let y = bottom - 3;
+            for (const l of layers) { if (l.a <= 0) continue; const h = l.a * LH; fill(x, y - h, TW, h + 0.6, COLORS[l.c]); fill(x, y - h, TW, Math.min(3, h), 'rgba(255,255,255,.22)'); y -= h; }
+            fill(x + 6, top, 4, bottom - top, 'rgba(255,255,255,.16)');
+            ctx.restore();
+            tubePath(x, top, bottom); ctx.lineWidth = 2.5; ctx.strokeStyle = glow || 'rgba(235,242,255,.85)'; ctx.stroke();
+            ctx.fillStyle = glow || 'rgba(235,242,255,.9)'; ctx.beginPath(); ctx.roundRect(x - 4, top - 4, TW + 8, 5, 2.5); ctx.fill();
+          };
+          const layersOf = b => b.map(c => ({ c, a: 1 }));
+          drawGame = () => {
+            const now = performance.now();
+            const grad = ctx.createLinearGradient(0, 0, 0, H); grad.addColorStop(0, '#2d3a5c'); grad.addColorStop(1, '#151b2c');
+            ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+            label('레벨 ' + game.level, W / 2, 34, 22, '#ffffff');
+            label('되돌리기 ' + game.undos + '번 남음' + (game.extra ? '' : ' · 빈 병 1개 추가 가능'), W / 2, 60, 12, 'rgba(220,228,255,.7)', 'center', font(12, 'normal'));
+            const L = layout(), p = anim ? Math.min(1, (now - anim.t0) / DUR) : 0, q = anim ? ease((p - 0.25) / 0.45) : 0;
+            game.bottles.forEach((b, i) => {
+              if (anim && i === anim.from) return;
+              const { x, top, bottom } = L[i], lift = i === sel ? 18 : 0;
+              let layers = layersOf(b);
+              if (anim && i === anim.to) { layers = layersOf(b.slice(0, b.length - anim.n)); layers.push({ c: anim.color, a: anim.n * q }); }
+              drawTube(x, top - lift, bottom - lift, layers, i === sel ? '#ffe27a' : null);
+              const since = now - (doneAt[i] || -1e9);
+              if (game.done(i) && since < 1100) {
+                for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4 + since / 400, r = 18 + since / 30; disc(x + TW / 2 + Math.cos(a) * r, top - 6 + Math.sin(a) * r * 0.6, 2.5 * (1 - since / 1100), COLORS[b[0]]); }
+              }
+            });
+            if (anim) {
+              const s = L[anim.from], t = L[anim.to], side = s.x < t.x ? -1 : 1;
+              const startX = s.x + TW / 2, startY = s.top - 18, endX = t.x + TW / 2 + side * 8, endY = t.top - 14;
+              const m = p < 0.7 ? ease(p / 0.25) : 1 - ease((p - 0.7) / 0.3), angle = -side * 1.95 * m;
+              const px = lerp(startX, endX, m), py = lerp(startY, endY, m);
+              const src = game.bottles[anim.from], layers = layersOf(src); layers.push({ c: anim.color, a: anim.n * (1 - q) });
+              if (p > 0.25 && p < 0.72) {
+                const surface = t.bottom - 3 - (game.bottles[anim.to].length - anim.n + anim.n * q) * LH;
+                fill(px - 2.5, py, 5, Math.max(0, surface - py), COLORS[anim.color]);
+              }
+              ctx.save(); ctx.translate(px, py); ctx.rotate(angle); drawTube(-TW / 2, 0, TH, layers); ctx.restore();
+            }
+            if (game.won && !anim) {
+              fill(0, 0, W, H, 'rgba(10,14,25,.6)');
+              label('레벨 ' + game.level + ' 클리어!', W / 2, H / 2 - 20, 28, '#ffe27a');
+              label(game.moves + '번 만에 정리했어요', W / 2, H / 2 + 16, 14, '#ffffff', 'center', font(14, 'normal'));
+              label('탭해서 다음 레벨', W / 2, H / 2 + 52, 15, '#ffffff');
+            }
+          };
+          paintExtra = () => {
+            undo.textContent = '↶ 되돌리기 ' + game.undos; undo.disabled = !game.history.length || game.undos <= 0 || game.won;
+            add.disabled = game.extra || game.won;
+            const stuck = !game.won && !game.bottles.some((_, i) => game.bottles.some((_, j) => game.canPour(i, j)));
+            info.textContent = game.won ? '다음 레벨로 넘어가려면 화면을 누르세요' : msg || (stuck ? '더 부을 곳이 없어요 · 되돌리기나 빈 병 추가를 써 보세요' : sel >= 0 ? '부을 병을 누르세요' : '병을 누른 뒤 부을 병을 누르세요 · 같은 색끼리 모으면 깨요');
+            canvas.setAttribute('aria-label', '레벨 ' + game.level + ' · ' + game.bottles.map((b, i) => (i + 1) + '번 병 ' + (b.length ? b.map(c => NAMES[c]).join(' ') : '빔')).join(' / '));
+            const b0 = best(); chips([['레벨 ' + game.level], b0 != null && ['🏆 레벨 ' + b0]]);
+          };
+        } else if (kind === 'candy') {
+          // Candy Crush: glossy candies on a see-through board. Swipe a candy, or tap two neighbours, to swap them.
+          const N = 8, CS = 42, BX = 12, BY = 98;
+          const COLORS = [['#ff6b78', '#d0142f'], ['#ffb04d', '#dd640c'], ['#fff07a', '#e3ad00'], ['#7de37a', '#219a2c'], ['#6ab8ff', '#1459cf'], ['#d68bff', '#7c22c7']];
+          const CHEERS = ['', '', '달콤해!', '맛있어!', '훌륭해!', '환상적!'];
+          const disp = new Map();
+          let ghosts = [], sel = null, drag = null, idleAt = performance.now(), saved = false, banner = null, bad = null;
+          const cellXY = (r, c) => ({ x: BX + c * CS + CS / 2, y: BY + r * CS + CS / 2 });
+          const nextLevel = level => { st.game = newCandyGame(Math.random, st.level, level); st.started = 0; st.stopped = 0; st.recorded = false; st.newBest = false; show(mode); };
+          tools.append(button('⟲ 이 레벨 다시', () => nextLevel(game.level)));
+          const cellAt = p => { const c = Math.floor((p.x - BX) / CS), r = Math.floor((p.y - BY) / CS); return r >= 0 && r < N && c >= 0 && c < N ? [r, c] : null; };
+          const attempt = (a, b) => {
+            const res = game.trySwap(a, b); sel = null; idleAt = performance.now();
+            if (res === 'ok') { begin(); sfx.play('move'); }
+            else if (res === 'bad') { sfx.play('nope'); bad = { a, b, t0: performance.now() }; }
+          };
+          on(canvas, 'pointerdown', e => {
+            e.preventDefault(); focus();
+            if (game.ended) return nextLevel(game.won ? game.level + 1 : game.level);
+            const p = toWorld(e), cell = cellAt(p);
+            if (!cell || game.phase !== 'idle') return;
+            canvas.setPointerCapture?.(e.pointerId);
+            drag = { id: e.pointerId, cell, x: p.x, y: p.y, used: false };
+            if (sel && Math.abs(sel[0] - cell[0]) + Math.abs(sel[1] - cell[1]) === 1) { attempt(sel, cell); drag.used = true; }
+            else { sel = sel && sel[0] === cell[0] && sel[1] === cell[1] ? null : cell; sfx.play('tap'); }
+          });
+          on(canvas, 'pointermove', e => {
+            if (!drag || drag.id !== e.pointerId || drag.used) return;
+            const p = toWorld(e), dx = p.x - drag.x, dy = p.y - drag.y;
+            if (Math.max(Math.abs(dx), Math.abs(dy)) < 14) return;
+            const [r, c] = drag.cell, to = Math.abs(dx) > Math.abs(dy) ? [r, c + Math.sign(dx)] : [r + Math.sign(dy), c];
+            drag.used = true;
+            if (to[0] >= 0 && to[0] < N && to[1] >= 0 && to[1] < N) attempt(drag.cell, to);
+          });
+          for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) on(canvas, ev, () => { drag = null; });
+          keyDown = k => { if ((k === ' ' || k === 'enter') && game.ended) nextLevel(game.won ? game.level + 1 : game.level); };
+          onStep = dt => {
+            const s = dt / 1000; let moving = false;
+            game.grid.forEach((row, r) => row.forEach((q, c) => {
+              if (!q) return;
+              const t = cellXY(r, c); let d = disp.get(q.id);
+              if (!d) { d = { x: t.x, y: t.y, v: 0 }; disp.set(q.id, d); }
+              if (d.x !== t.x) { const k = 400 * s; d.x = Math.abs(t.x - d.x) <= k ? t.x : d.x + Math.sign(t.x - d.x) * k; moving = true; }
+              if (d.y !== t.y) {
+                if (Math.abs(t.y - d.y) <= CS * 1.05 && d.v === 0) { const k = 400 * s; d.y = Math.abs(t.y - d.y) <= k ? t.y : d.y + Math.sign(t.y - d.y) * k; }
+                else { d.v = Math.min(1100, d.v + 3000 * s); const k = Math.max(260, d.v) * s; if (Math.abs(t.y - d.y) <= k) { d.y = t.y; d.v = 0; } else d.y += Math.sign(t.y - d.y) * k; }
+                moving = true;
+              }
+            }));
+            for (const g2 of ghosts) g2.t -= s;
+            ghosts = ghosts.filter(g2 => g2.t > 0);
+            if (bad && performance.now() - bad.t0 > 320) bad = null;
+            if (banner && (banner.t -= s) <= 0) banner = null;
+            if (game.phase !== 'busy' || moving || ghosts.some(g2 => g2.t > g2.T - 0.16)) return;
+            const ev = game.settle();
+            if (ev.type === 'clear') {
+              for (const q of ev.cleared) { const p = cellXY(q.r, q.c); ghosts.push({ ...q, x: p.x, y: p.y, t: 0.3, T: 0.3 }); disp.delete(q.id); }
+              const big = ev.combo || ev.cleared.length > 9;
+              sfx.play(big ? 'clear' : 'pop', Math.min(4, game.cascade)); if (ev.created.length) sfx.play('match');
+              if (big || game.cascade >= 3) navigator.vibrate?.(15);
+              if (CHEERS[Math.min(5, game.cascade)] && !game.sugar) banner = { text: CHEERS[Math.min(5, game.cascade)], t: 1, T: 1 };
+            } else if (ev.type === 'fall') {
+              const count = {};
+              for (const sp of ev.spawned) count[sp.c] = (count[sp.c] || 0) + 1;
+              for (const sp of ev.spawned) { const t = cellXY(sp.r, sp.c); disp.set(sp.id, { x: t.x, y: t.y - count[sp.c] * CS - 8, v: 1 }); }
+              for (const id of ev.fell) { const d = disp.get(id); if (d) d.v = 1; }
+            } else if (ev.type === 'sugar') { if (!banner || banner.text !== '슈가 크러시!') banner = { text: '슈가 크러시!', t: 1.8, T: 1.8 }; sfx.play('level'); }
+            else if (ev.type === 'shuffle') { banner = { text: '사탕을 섞어요', t: 1.1, T: 1.1 }; sfx.play('move'); }
+            else if (ev.type === 'won' || ev.type === 'lost') {
+              sfx.play(ev.type === 'won' ? 'win' : 'lose');
+              if (ev.type === 'won' && !saved) { saved = true; st.newBest = saveGameBest(mode + '-' + st.level, game.level, false); }
+              paint();
+            } else if (ev.type === 'ready') idleAt = performance.now();
+          };
+          sign = () => [game.score, game.moves, game.phase, game.level].join('/');
+          const shapePath = (color, r) => {
+            ctx.beginPath();
+            if (color === 0) ctx.ellipse(0, 0, r * 1.02, r * 0.7, -0.55, 0, Math.PI * 2);
+            else if (color === 1) { ctx.roundRect(-r * 0.66, -r * 0.66, r * 1.32, r * 1.32, r * 0.3); }
+            else if (color === 2) { ctx.moveTo(-r * 1.05, 0); ctx.quadraticCurveTo(0, -r * 1.25, r * 1.05, 0); ctx.quadraticCurveTo(0, r * 1.25, -r * 1.05, 0); }
+            else if (color === 3) ctx.roundRect(-r * 0.8, -r * 0.8, r * 1.6, r * 1.6, r * 0.32);
+            else if (color === 4) ctx.arc(0, 0, r * 0.88, 0, Math.PI * 2);
+            else { for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3 - Math.PI / 2; ctx.lineTo(Math.cos(a) * r * 0.95, Math.sin(a) * r * 0.95); } ctx.closePath(); }
+          };
+          const candyAt = (x, y, q, scale = 1, alpha = 1) => {
+            const r = CS * 0.4 * scale;
+            ctx.save(); ctx.globalAlpha = alpha; ctx.translate(x, y);
+            if (q.kind === 'b') {
+              const gr = ctx.createRadialGradient(-r * 0.3, -r * 0.3, 1, 0, 0, r * 0.95); gr.addColorStop(0, '#9a5b2e'); gr.addColorStop(1, '#3d2008');
+              disc(0, 0, r * 0.92, gr);
+              const dots = ['#ff6b78', '#fff07a', '#7de37a', '#6ab8ff', '#d68bff', '#ffffff'];
+              for (let k = 0; k < 14; k++) { const a = k * 2.39, d = r * (0.25 + (k * 37 % 60) / 100); disc(Math.cos(a) * d, Math.sin(a) * d, r * 0.09, dots[k % 6]); }
+              ctx.restore(); return;
+            }
+            const [light, dark] = COLORS[q.color];
+            if (q.kind === 'w') {
+              ctx.fillStyle = dark; ctx.globalAlpha = alpha * 0.85;
+              for (const sd of [-1, 1]) { ctx.beginPath(); ctx.moveTo(sd * r * 0.7, 0); ctx.lineTo(sd * r * 1.2, -r * 0.55); ctx.lineTo(sd * r * 1.2, r * 0.55); ctx.closePath(); ctx.fill(); }
+              ctx.globalAlpha = alpha; ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.roundRect(-r * 0.9, -r * 0.9, r * 1.8, r * 1.8, r * 0.4); ctx.stroke();
+            }
+            const gr = ctx.createRadialGradient(-r * 0.35, -r * 0.4, r * 0.1, 0, 0, r * 1.1); gr.addColorStop(0, light); gr.addColorStop(1, dark);
+            shapePath(q.color, r); ctx.fillStyle = gr; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,.18)'; ctx.stroke();
+            if (q.color === 4) { ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 2; ctx.beginPath(); for (let a = 0; a < 9; a += 0.3) ctx.lineTo(Math.cos(a) * a * r * 0.09, Math.sin(a) * a * r * 0.09); ctx.stroke(); }
+            if (q.kind === 'h' || q.kind === 'v') {
+              ctx.save(); shapePath(q.color, r); ctx.clip(); ctx.fillStyle = 'rgba(255,255,255,.85)';
+              for (let k = -3; k <= 3; k++) { if (q.kind === 'h') ctx.fillRect(-r * 1.3, k * r * 0.34 - r * 0.07, r * 2.6, r * 0.14); else ctx.fillRect(k * r * 0.34 - r * 0.07, -r * 1.3, r * 0.14, r * 2.6); }
+              ctx.restore();
+            }
+            ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.ellipse(-r * 0.3, -r * 0.38, r * 0.3, r * 0.15, -0.5, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+          };
+          drawGame = () => {
+            const now = performance.now();
+            const bg = ctx.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#8fd0ff'); bg.addColorStop(1, '#4a73d6');
+            ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+            for (let k = 0; k < 18; k++) disc((k * 83) % W, 20 + (k * 53) % (H - 20), 3 + k % 4, 'rgba(255,255,255,.12)');
+            // Top bar: moves, level and target, score with three stars.
+            ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.beginPath(); ctx.roundRect(10, 10, 78, 74, 14); ctx.fill();
+            label('이동', 49, 28, 13, '#5b4b8a'); label(String(game.moves), 49, 58, 30, game.moves <= 5 ? '#e53950' : '#3a2f6b');
+            ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.beginPath(); ctx.roundRect(96, 10, 254, 74, 14); ctx.fill();
+            label('레벨 ' + game.level + ' · 목표 ' + game.target.toLocaleString(), 223, 26, 13, '#5b4b8a');
+            label(game.score.toLocaleString(), 223, 50, 22, '#3a2f6b');
+            const full = game.target * 2, fx = 110, fw = 226;
+            fill(fx, 68, fw, 8, '#e3dcf5'); fill(fx, 68, fw * Math.min(1, game.score / full), 8, '#ff5c9a');
+            for (const [m, need] of [[0.5, 1], [0.75, 1.5], [1, 2]]) {
+              const sx = fx + fw * m - (m === 1 ? 6 : 0), on2 = game.score >= game.target * need;
+              ctx.fillStyle = on2 ? '#ffd23f' : '#cfc6e6'; ctx.beginPath();
+              for (let k = 0; k < 10; k++) { const a = k * Math.PI / 5 - Math.PI / 2, rr = k % 2 ? 3.5 : 8; ctx.lineTo(sx + Math.cos(a) * rr, 72 + Math.sin(a) * rr); }
+              ctx.closePath(); ctx.fill();
+            }
+            ctx.fillStyle = 'rgba(25,30,80,.32)'; ctx.beginPath(); ctx.roundRect(BX - 4, BY - 4, CS * N + 8, CS * N + 8, 12); ctx.fill();
+            for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if ((r + c) % 2) fill(BX + c * CS, BY + r * CS, CS, CS, 'rgba(255,255,255,.07)');
+            if (sel && game.phase === 'idle') { ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.roundRect(BX + sel[1] * CS + 2, BY + sel[0] * CS + 2, CS - 4, CS - 4, 8); ctx.fill(); }
+            const hint = game.phase === 'idle' && !game.ended && now - idleAt > 5000 ? game.hint() : null;
+            ctx.save(); ctx.beginPath(); ctx.rect(BX - 4, BY - 4, CS * N + 8, CS * N + 8); ctx.clip();
+            game.grid.forEach((row, r) => row.forEach((q, c) => {
+              if (!q) return;
+              const d = disp.get(q.id) || cellXY(r, c); let x = d.x, y = d.y, sc = 1;
+              if (bad) {
+                const p = Math.sin(Math.min(1, (now - bad.t0) / 320) * Math.PI) * 0.45 * CS;
+                for (const [m, o] of [[bad.a, bad.b], [bad.b, bad.a]]) if (m[0] === r && m[1] === c) { x += (o[1] - m[1]) * p; y += (o[0] - m[0]) * p; }
+              }
+              if (hint && hint.some(([hr, hc]) => hr === r && hc === c)) sc = 1 + 0.08 * Math.sin(now / 120);
+              if (sel && sel[0] === r && sel[1] === c && game.phase === 'idle') sc = 1.08;
+              candyAt(x, y, q, sc);
+            }));
+            ctx.restore();
+            for (const g2 of ghosts) {
+              const p = 1 - g2.t / g2.T;
+              candyAt(g2.x, g2.y, g2, 1 + p * 0.5, 1 - p);
+              const col = g2.kind === 'b' ? '#ffffff' : COLORS[g2.color][0];
+              for (let k = 0; k < 5; k++) { const a = k * 1.26 + g2.id, d = 8 + p * 26; disc(g2.x + Math.cos(a) * d, g2.y + Math.sin(a) * d, 3 * (1 - p), col); }
+              if (g2.kind === 'h' || g2.kind === 'v') { ctx.globalAlpha = 1 - p; if (g2.kind === 'h') fill(BX, g2.y - 4, CS * N, 8, 'rgba(255,255,255,.8)'); else fill(g2.x - 4, BY, 8, CS * N, 'rgba(255,255,255,.8)'); ctx.globalAlpha = 1; }
+            }
+            if (banner) {
+              const p = 1 - banner.t / banner.T, s2 = Math.min(1, p * 5);
+              ctx.save(); ctx.globalAlpha = Math.min(1, banner.t * 3); ctx.translate(W / 2, BY + CS * 4); ctx.scale(0.6 + 0.4 * s2, 0.6 + 0.4 * s2);
+              ctx.font = font(34); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+              ctx.lineWidth = 7; ctx.strokeStyle = '#7a1f5c'; ctx.strokeText(banner.text, 0, 0); ctx.fillStyle = '#ffe14d'; ctx.fillText(banner.text, 0, 0);
+              ctx.restore();
+            }
+            if (game.ended) {
+              fill(0, 0, W, H, 'rgba(20,20,60,.6)');
+              if (game.won) {
+                label('레벨 ' + game.level + ' 클리어!', W / 2, 170, 28, '#ffe14d');
+                for (let k = 0; k < 3; k++) {
+                  const sx = W / 2 + (k - 1) * 46, on2 = k < game.stars();
+                  ctx.fillStyle = on2 ? '#ffd23f' : 'rgba(255,255,255,.25)'; ctx.beginPath();
+                  for (let j = 0; j < 10; j++) { const a = j * Math.PI / 5 - Math.PI / 2, rr = j % 2 ? 8 : 19; ctx.lineTo(sx + Math.cos(a) * rr, 225 + Math.sin(a) * rr); }
+                  ctx.closePath(); ctx.fill();
+                }
+                label(game.score.toLocaleString() + '점', W / 2, 272, 20, '#ffffff');
+                label('탭해서 다음 레벨', W / 2, 316, 15, '#ffffff', 'center', font(15, 'normal'));
+              } else {
+                label('이동이 끝났어요', W / 2, 190, 26, '#ffffff');
+                label('목표까지 ' + (game.target - game.score).toLocaleString() + '점', W / 2, 232, 16, '#ffd1e6', 'center', font(16, 'normal'));
+                label('탭해서 다시 하기', W / 2, 280, 15, '#ffffff', 'center', font(15, 'normal'));
+              }
+            }
+          };
+          paintExtra = () => {
+            const b0 = best(); chips([['레벨 ' + game.level], ['⭐ ' + game.score.toLocaleString()], b0 != null && ['🏆 레벨 ' + b0]]);
+            info.textContent = game.ended ? (game.won ? '화면을 누르면 다음 레벨' : '화면을 누르면 이 레벨을 다시 해요')
+              : '사탕을 밀거나 이웃한 두 개를 눌러 바꾸세요 · 4개는 줄무늬, ㄱ·T자는 포장, 5개는 초코볼';
+          };
+        } else if (kind === 'knife') {
+          // Knife Hit: a wooden log turns at the top; knives wait at the bottom; every fifth log is a boss (a wheel of cheese).
+          const CX = 180, CY = 200, R = 72;
+          let lastHit = -9, lastApple = -9, lastBroke = -9, lastStage = game.stage, failSeen = false;
+          const fire = () => { if (game.throwKnife()) { begin(); sfx.play('move'); } focus(); };
+          on(canvas, 'pointerdown', e => { e.preventDefault(); fire(); });
+          keyDown = (k, repeat) => { if ([' ', 'enter', 'arrowup', 'w'].includes(k) && !repeat) fire(); };
+          onStep = dt => {
+            game.step(dt);
+            if (game.hitAt !== lastHit) { lastHit = game.hitAt; sfx.play('hit', 1); navigator.vibrate?.(8); }
+            if (game.appleAt !== lastApple) { lastApple = game.appleAt; sfx.play('coin'); }
+            if (game.brokeAt !== lastBroke) { lastBroke = game.brokeAt; sfx.play('clear', 2); }
+            if (game.stage !== lastStage) { lastStage = game.stage; if (game.boss) sfx.play('level'); }
+            if (game.ended && !failSeen) { failSeen = true; sfx.play('lose'); navigator.vibrate?.(60); finish(false, game.score); }
+          };
+          sign = () => [game.score, game.apples, game.stage, game.remaining, game.ended, game.ended && game.time - game.fail.t > 0.9].join('/');
+          const knifeAt = (x, y, rot) => {
+            ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+            ctx.fillStyle = '#e4e9ee'; ctx.beginPath(); ctx.moveTo(0, -36); ctx.lineTo(5.5, -23); ctx.lineTo(5.5, 0); ctx.lineTo(-5.5, 0); ctx.lineTo(-5.5, -25); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#b4bec8'; ctx.beginPath(); ctx.moveTo(0, -36); ctx.lineTo(5.5, -23); ctx.lineTo(5.5, 0); ctx.lineTo(0, 0); ctx.closePath(); ctx.fill();
+            fill(-8, 0, 16, 4, '#4a505c');
+            ctx.fillStyle = '#25282f'; ctx.beginPath(); ctx.roundRect(-4.5, 4, 9, 26, 3); ctx.fill();
+            fill(-4.5, 11, 9, 1.5, '#3c414c'); fill(-4.5, 17, 9, 1.5, '#3c414c'); fill(-4.5, 23, 9, 1.5, '#3c414c');
+            ctx.restore();
+          };
+          const apple = (x, y) => { disc(x, y, 9, '#e8383d'); disc(x - 3, y - 3, 2.6, 'rgba(255,255,255,.55)'); fill(x - 0.8, y - 13, 1.8, 5, '#5b3a1e'); ctx.fillStyle = '#4caf50'; ctx.beginPath(); ctx.ellipse(x + 4, y - 11, 4, 2, -0.5, 0, Math.PI * 2); ctx.fill(); };
+          const wood = (boss) => {
+            if (boss) {
+              disc(0, 0, R, '#e2a92a'); disc(0, 0, R - 6, '#f7cd4a');
+              for (const [a, d, r] of [[0.3, 30, 9], [1.9, 44, 7], [2.8, 22, 6], [4.0, 46, 10], [5.2, 28, 7], [3.4, 56, 5], [0.9, 58, 5]]) disc(Math.cos(a) * d, Math.sin(a) * d, r, '#e0ad2c');
+              return;
+            }
+            disc(0, 0, R, '#7a4b22'); disc(0, 0, R - 7, '#d49b5d');
+            ctx.strokeStyle = '#b97a40'; ctx.lineWidth = 2;
+            for (const r of [R - 20, R - 33, R - 46, R - 58]) { ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke(); }
+            ctx.strokeStyle = '#a5672f'; ctx.lineWidth = 1.5;
+            for (const a of [0.4, 2.1, 3.6, 5.0]) { ctx.beginPath(); ctx.moveTo(Math.cos(a) * 6, Math.sin(a) * 6); ctx.lineTo(Math.cos(a + 0.12) * (R - 14), Math.sin(a + 0.12) * (R - 14)); ctx.stroke(); }
+            disc(0, 0, 5, '#9a6232');
+            for (let k = 0; k < 14; k++) { const a = k * Math.PI / 7; disc(Math.cos(a) * (R - 3), Math.sin(a) * (R - 3), 2, '#5e3615'); }
+          };
+          drawGame = () => {
+            const grad = ctx.createRadialGradient(CX, 230, 40, CX, 260, 380); grad.addColorStop(0, '#3a3f52'); grad.addColorStop(1, '#1b1d26');
+            ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+            ctx.save();
+            if (game.ended && game.time - game.fail.t < 0.35) { const k = (0.35 - (game.time - game.fail.t)) * 22; ctx.translate(Math.sin(game.time * 90) * k, Math.cos(game.time * 70) * k * 0.5); }
+            label(String(game.score), 22, 38, 32, '#ffffff', 'left');
+            apple(W - 28, 38); label(String(game.apples), W - 46, 39, 20, '#ffffff', 'right');
+            const idx = (game.stage - 1) % 5;
+            for (let k = 0; k < 5; k++) {
+              const x = CX + (k - 2) * 24, boss = k === 4;
+              disc(x, 30, boss ? 8 : 6, k < idx ? '#f4c542' : boss ? (k === idx ? '#ff5252' : '#5d2f36') : k === idx ? '#ffffff' : '#4b5063');
+            }
+            label(game.boss ? '보스 스테이지' : '스테이지 ' + game.stage, CX, 54, 14, game.boss ? '#ff6b6b' : '#c9cfdc');
+            const bump = game.time - game.hitAt < 0.07 ? -6 : 0;
+            if (game.wait > 0) {
+              const t = game.time - game.brokeAt;
+              ctx.globalAlpha = Math.max(0, 1 - t / 1.0);
+              for (let k = 0; k < 4; k++) {
+                const a = game.angle + k * Math.PI / 2 + Math.PI / 4, off = 170 * t, fall = 420 * t * t;
+                ctx.save(); ctx.translate(CX + Math.cos(a) * off, CY + Math.sin(a) * off + fall); ctx.rotate(game.angle + t * (k % 2 ? 3 : -3));
+                ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, R, k * Math.PI / 2, (k + 1) * Math.PI / 2); ctx.closePath(); ctx.clip(); wood(game.boss); ctx.restore();
+              }
+              game.knives.forEach((a, k) => { const w = a + game.angle, off = R + 18 + 260 * t; knifeAt(CX + Math.cos(w) * off, CY + Math.sin(w) * off + 300 * t * t, w - Math.PI / 2 + t * (k % 2 ? 6 : -6)); });
+              ctx.globalAlpha = 1;
+              if (t < 0.12) fill(0, 0, W, H, 'rgba(255,255,255,' + (0.35 * (1 - t / 0.12)) + ')');
+            } else {
+              ctx.save(); ctx.translate(CX, CY + bump); ctx.rotate(game.angle);
+              for (const a of game.knives) { ctx.save(); ctx.rotate(a); ctx.translate(R + 18, 0); knifeAt(0, 0, -Math.PI / 2); ctx.restore(); }
+              wood(game.boss);
+              if (game.time - game.hitAt < 0.06) disc(0, 0, R, 'rgba(255,255,255,.35)');
+              for (const a of game.fruit) apple(Math.cos(a) * (R + 9), Math.sin(a) * (R + 9));
+              ctx.restore();
+              if (game.boss && game.stageTime < 1.4 && !game.ended) label('보스 등장!', CX, 330, 28, '#ff5252');
+            }
+            if (!game.ended && game.wait <= 0) {
+              const p = game.flight == null ? 0 : Math.min(1, game.flight / 0.09);
+              knifeAt(CX, lerp(452, CY + R + 18, p), 0);
+            }
+            if (game.ended) {
+              const t = game.time - game.fail.t;
+              knifeAt(CX + game.fail.side * 150 * t, CY + R + 18 - 240 * t + 1150 * t * t, game.fail.side * 10 * t);
+            }
+            for (let i = 0; i < game.total; i++) {
+              const y = 500 - i * 19, live = i < game.remaining - (game.flight != null || game.ended || game.wait > 0 ? 0 : 1);
+              ctx.fillStyle = live ? '#ffffff' : '#4b5063';
+              ctx.beginPath(); ctx.moveTo(22, y - 13); ctx.lineTo(26, y - 7); ctx.lineTo(26, y); ctx.lineTo(18, y); ctx.lineTo(18, y - 7); ctx.closePath(); ctx.fill();
+              fill(19.5, y + 1, 5, 6, live ? '#ffffff' : '#4b5063');
+            }
+            if (!game.started) label('탭해서 칼을 던지세요', CX, 380, 16, '#c9cfdc');
+            ctx.restore();
+          };
+        } else {
+          // Count Masters: blue stickmen run a road over the sea; blue gates add, red ones take; then the bonus stairs.
+          const HZ = 150, CAMH = 9, F = 300, BACK = 11;
+          const P = (zr, wx, elev = 0) => { const d = Math.max(0.6, zr + BACK), s = F / d; return { x: 180 + wx * s, y: HZ + (CAMH - elev) * s, s }; };
+          const SPOTS = Array.from({ length: 160 }, (_, i) => ({ i, ...game.man(i) })).sort((a, b) => b.dz - a.dz);
+          let anchor = null, lastCount = game.count, hitT = 0, lastSteps = 0, endSeen = false;
+          on(canvas, 'pointerdown', e => { e.preventDefault(); canvas.setPointerCapture?.(e.pointerId); anchor = { id: e.pointerId, x: e.clientX, t: game.target, w: canvas.getBoundingClientRect().width }; game.start(); begin(); focus(); });
+          on(canvas, 'pointermove', e => { if (anchor && anchor.id === e.pointerId) game.aim(anchor.t + (e.clientX - anchor.x) / anchor.w * 2.6); });
+          for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) on(canvas, ev, () => { anchor = null; });
+          const held = new Set();
+          const steer = () => game.move((held.has('arrowright') || held.has('d') ? 1 : 0) - (held.has('arrowleft') || held.has('a') ? 1 : 0));
+          keyDown = k => { held.add(k); game.start(); begin(); steer(); };
+          keyUp = k => { held.delete(k); steer(); };
+          release = () => { held.clear(); game.move(0); anchor = null; };
+          onStep = dt => {
+            game.step(dt); hitT -= dt / 1000;
+            if (game.count > lastCount) sfx.play('pop', 2);
+            else if (game.count < lastCount) { if (game.phase === 'fight') { if (hitT <= 0) { sfx.play('hit', 1); hitT = 0.12; } } else if (game.phase !== 'stairs') { sfx.play('hurt'); navigator.vibrate?.(20); } }
+            if (game.steps > lastSteps) { lastSteps = game.steps; sfx.play('tap'); }
+            lastCount = game.count;
+            if (game.ended && !endSeen) { endSeen = true; sfx.play(game.won ? 'win' : 'lose'); finish(false, game.score); }
+          };
+          sign = () => [game.count, game.ended, game.started, game.phase].join('/');
+          const man = (x, y, s, color, phase) => {
+            const sw = Math.sin(phase) * 0.12 * s;
+            ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.beginPath(); ctx.ellipse(x, y, 0.2 * s, 0.06 * s, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = color; ctx.lineCap = 'round'; ctx.lineWidth = Math.max(1, 0.1 * s);
+            ctx.beginPath(); ctx.moveTo(x, y - 0.28 * s); ctx.lineTo(x - sw, y); ctx.moveTo(x, y - 0.28 * s); ctx.lineTo(x + sw, y); ctx.stroke();
+            ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(x - 0.11 * s, y - 0.56 * s, 0.22 * s, 0.32 * s, 0.08 * s); ctx.fill();
+            disc(x, y - 0.66 * s, 0.12 * s, color);
+          };
+          const crowd = (n, wx0, zr0, elev, color, spread = 1) => {
+            for (const m of SPOTS) {
+              if (m.i >= n) continue;
+              const p = P(zr0 + m.dz * spread, (wx0 + m.dx * 5 * spread), elev);
+              if (p.y > H + 20) continue;
+              man(p.x, p.y, p.s, color, game.time * 14 + m.i);
+            }
+          };
+          const pill = (text, x, y, size, bg, fg) => {
+            ctx.font = font(size); const w = ctx.measureText(text).width + size;
+            ctx.fillStyle = bg; ctx.beginPath(); ctx.roundRect(x - w / 2, y - size * 0.8, w, size * 1.6, size * 0.8); ctx.fill(); label(text, x, y + 1, size, fg);
+          };
+          const quad = (a, b, c, d, color) => { ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.closePath(); ctx.fill(); };
+          drawGame = () => {
+            const stairs = game.phase === 'stairs' || game.ended && game.won;
+            const camZ = stairs ? game.length + game.steps * 2 : game.z, elev = stairs ? game.steps * 0.5 : 0;
+            const sky = ctx.createLinearGradient(0, 0, 0, HZ); sky.addColorStop(0, '#5db7f5'); sky.addColorStop(1, '#cdeeff');
+            ctx.fillStyle = sky; ctx.fillRect(0, 0, W, HZ); fill(0, HZ, W, H - HZ, '#4fb0e6');
+            for (let i = 0; i < 6; i++) fill(((i * 97 - game.time * 6) % W + W) % W, HZ + 12 + i * 22, 40 + i * 6, 2, 'rgba(255,255,255,.35)');
+            const roadEnd = game.length - camZ, far = Math.min(200, roadEnd);
+            // Rails and road, then stripes across it.
+            if (far > -10) {
+              const z0 = -BACK + 1.2;
+              quad(P(far, -5.5, -elev), P(far, 5.5, -elev), P(z0, 5.5, -elev), P(z0, -5.5, -elev), '#aab4c8');
+              quad(P(far, -5, -elev), P(far, 5, -elev), P(z0, 5, -elev), P(z0, -5, -elev), '#eef1f7');
+              for (let z = Math.ceil((camZ - 10) / 6) * 6; z < camZ + far; z += 6) { if (Math.round(z / 6) % 2) continue; const a = z - camZ, b = Math.min(far, a + 3); if (b < z0) continue; quad(P(b, -5, -elev), P(b, 5, -elev), P(Math.max(z0, a), 5, -elev), P(Math.max(z0, a), -5, -elev), '#e1e6f0'); }
+              // Finish line: a checker band.
+              const fz = roadEnd;
+              if (fz > z0 && fz < 200) for (let c = 0; c < 10; c++) for (let r = 0; r < 2; r++) quad(P(fz + r * 0.5 + 0.5, -5 + c, -elev), P(fz + r * 0.5 + 0.5, -4 + c, -elev), P(fz + r * 0.5, -4 + c, -elev), P(fz + r * 0.5, -5 + c, -elev), (c + r) % 2 ? '#222' : '#fff');
+            }
+            // The bonus stairs, far ones first.
+            for (let k = game.maxSteps; k >= 1; k--) {
+              const zr = game.length + (k - 1) * 2 - camZ, top = k * 0.5 - elev;
+              if (zr > 200 || zr + 2 < -BACK + 1.2) continue;
+              const hue = (k * 23) % 360, near = Math.max(-BACK + 1.2, zr);
+              quad(P(zr + 2, -5, top), P(zr + 2, 5, top), P(near, 5, top), P(near, -5, top), 'hsl(' + hue + ',70%,72%)');
+              if (zr > -BACK + 1.2) {
+                quad(P(zr, -5, top), P(zr, 5, top), P(zr, 5, top - 0.5), P(zr, -5, top - 0.5), 'hsl(' + hue + ',62%,58%)');
+                const c = P(zr, 0, top - 0.25); if (c.s > 7) label('×' + (1 + k * 0.1).toFixed(1), c.x, c.y, Math.min(22, c.s * 0.45), '#ffffff');
+              }
+            }
+            const evs = game.events.filter(e => (!e.done || e === game.fight) && e.z - camZ < 170 && e.z - camZ > -3).sort((a, b) => b.z - a.z);
+            for (const e of evs) {
+              const zr = e.z - camZ;
+              if (e.type === 'gate') {
+                e.gates.forEach((gt, i) => {
+                  const good = gt.op === '+' || gt.op === '*', x0 = i ? 0.15 : -5, x1 = i ? 5 : -0.15;
+                  const bl = P(zr, x0), br = P(zr, x1), tl = P(zr, x0, 3.2);
+                  ctx.globalAlpha = 0.6; fill(bl.x, tl.y, br.x - bl.x, bl.y - tl.y, good ? '#2f80ed' : '#eb5757'); ctx.globalAlpha = 1;
+                  fill(bl.x, tl.y, br.x - bl.x, Math.max(2, 0.15 * bl.s), '#ffffff');
+                  fill(bl.x, tl.y, Math.max(2, 0.15 * bl.s), bl.y - tl.y, '#ffffff'); fill(br.x - Math.max(2, 0.15 * bl.s), tl.y, Math.max(2, 0.15 * bl.s), bl.y - tl.y, '#ffffff');
+                  label((gt.op === '*' ? '×' : gt.op === '/' ? '÷' : gt.op === '-' ? '−' : '+') + gt.v, (bl.x + br.x) / 2, (bl.y + tl.y) / 2, Math.max(8, 1.15 * bl.s), '#ffffff');
+                });
+              } else if (e.type === 'block') {
+                const x0 = e.from * 5, x1 = e.to * 5;
+                quad(P(zr + 0.8, x0, 1.6), P(zr + 0.8, x1, 1.6), P(zr, x1, 1.6), P(zr, x0, 1.6), '#c8cfdd');
+                const a = P(zr, x0), b = P(zr, x1, 1.6); fill(a.x, b.y, b.x - a.x, a.y - b.y, '#8d97ab');
+                for (let k = 0; k < 6; k++) { const s0 = P(zr, x0 + (x1 - x0) * k / 6), s1 = P(zr, x0 + (x1 - x0) * (k + 0.5) / 6, 1.6); if (k % 2 === 0) fill(s0.x, s1.y + (a.y - b.y) * 0.35, s1.x - s0.x, (a.y - b.y) * 0.3, '#f2c94c'); }
+              } else if (e.type === 'saw') {
+                const wx = game.sawAt(e) * 5, c = P(zr, wx, 1.2), r = 1.25 * c.s;
+                const sl = P(zr, -5), sr = P(zr, 5); fill(sl.x, sl.y - 2, sr.x - sl.x, Math.max(2, 0.12 * sl.s), '#7b8394');
+                ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(game.time * 9);
+                ctx.fillStyle = '#9aa1ad'; ctx.beginPath();
+                for (let k = 0; k < 24; k++) { const a = k * Math.PI / 12, rr = k % 2 ? r : r * 0.82; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+                ctx.closePath(); ctx.fill(); disc(0, 0, r * 0.7, '#c9ced8'); disc(0, 0, r * 0.18, '#5d6472'); ctx.restore();
+              } else if (e.type === 'enemy') {
+                const n = Math.min(160, e.left), z = e === game.fight ? Math.max(1.6, zr) : zr;
+                crowd(n, 0, z + 0.6, 0, '#e53935', 1);
+                const top = P(z, 0, 2.2); pill(String(e.left), top.x, top.y, Math.max(10, Math.min(16, top.s * 0.6)), '#e53935', '#ffffff');
+              }
+            }
+            crowd(game.shown(), game.x * 5, 0, 0, '#2f80ed');
+            const head = P(0, game.x * 5, 2.1);
+            if (game.count) pill(String(game.count), head.x, head.y, 15, '#ffffff', '#2f80ed');
+            if (game.noteTime > 0) label(game.note, head.x, head.y - 34 - (1 - game.noteTime) * 26, 24, game.noteGood ? '#ffffff' : '#ffd1d1', 'center');
+            fill(60, 16, 240, 8, 'rgba(255,255,255,.55)'); fill(60, 16, 240 * Math.min(1, game.z / game.length), 8, '#2f80ed');
+            if (stairs) label('×' + game.mult.toFixed(1), W / 2, 50, 24, '#ffffff');
+            if (!game.started) {
+              fill(0, H - 150, W, 90, 'rgba(15,35,70,.55)');
+              label('화면을 좌우로 끌어서 시작', W / 2, H - 118, 18, '#ffffff');
+              label('파란 문은 늘고 빨간 문은 줄어요', W / 2, H - 88, 13, '#dbe9ff', 'center', font(13, 'normal'));
+            }
+          };
+        }
+
+        const draw = () => {
+          const size = Math.max(1, canvas.getBoundingClientRect().width), scale = Math.min(2, window.devicePixelRatio || 1) * size / W;
+          const width = Math.round(W * scale), height = Math.round(H * scale);
+          if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+          ctx.setTransform(width / W, 0, 0, height / H, 0, 0);
+          ctx.lineCap = 'butt'; ctx.lineJoin = 'miter'; ctx.globalAlpha = 1;
+          drawGame();
+        };
+        paint = () => {
+          if (kind === 'water' || kind === 'candy') return paintExtra();
+          const b0 = best();
+          if (kind === 'dino') { chips([b0 != null && ['🏆 ' + b0.toLocaleString()]]); info.textContent = '탭·스페이스로 점프(길게 누르면 높이) · ↓나 숙이기로 새를 피해요'; }
+          else if (kind === 'knife') {
+            chips([['⭐ ' + game.score], ['🍎 ' + game.apples], b0 != null && ['🏆 ' + b0]]);
+            info.textContent = '탭·스페이스로 칼 던지기 · 꽂힌 칼에 닿으면 끝 · 사과를 맞혀 보세요';
+            if (game.ended && game.time - game.fail.t > 0.9) showResult('칼이 튕겨 나갔어요', '점수 ' + game.score + ' · 스테이지 ' + game.stage + ' · 사과 ' + game.apples);
+          } else {
+            chips([['👥 ' + game.count], b0 != null && ['🏆 ' + b0.toLocaleString()]]);
+            info.textContent = '좌우로 끌거나 ←→로 이동 · 파란 문으로 인원을 늘리고 장애물과 적 무리를 넘어 계단으로';
+            if (game.ended) showResult(game.won ? '×' + game.mult.toFixed(1) + ' 계단까지!' : '인원이 모두 사라졌어요', game.won ? '도착 ' + game.finishCount + '명 × ' + game.mult.toFixed(1) + ' = ' + game.score.toLocaleString() + '점' : '다른 문을 골라 보세요');
+          }
+        };
+        let last = 0, gone = 0, signature = '';
+        const loop = t => {
+          frame = 0;
+          if (life.signal.aborted || panelStopped || !content.contains(board)) return;
+          if (!board.isConnected || document.hidden) {
+            last = 0; release();
+            if (!board.isConnected) { gone ||= t; if (t - gone > 60000) return; }
+            frame = requestAnimationFrame(loop); return;
+          }
+          gone = 0;
+          const dt = last ? Math.min(50, t - last) : 0; last = t;
+          onStep(dt); draw();
+          const next = sign();
+          if (next !== signature) { signature = next; paint(); }
+          frame = requestAnimationFrame(loop);
+        };
+        frame = requestAnimationFrame(loop);
+      }
       paintNow = (clockOnly) => { if (!content.contains(board)) return; paint(clockOnly); };
       paint();
       // Games played with the keyboard take focus, so arrow and number keys work straight away.
-      if (['merge', 'snake', 'shop', 'pinball', 'bricks', 'drop'].includes(mode)) board.focus({ preventScroll: true });
+      if (['merge', 'snake', 'shop', 'pinball', 'bricks', 'drop', 'dino', 'water', 'candy', 'knife', 'count'].includes(mode)) board.focus({ preventScroll: true });
     }
     return panel;
   }
@@ -2139,6 +3250,18 @@
 
   const CSS = "/* Buttons: the 말랑 capsule that presses down. */\n.gfx-load-games button { font:inherit; color:var(--gfx-text, #5A3A24); background:var(--gfx-card, #FFFDF5); border:2.5px solid var(--gfx-line, #6B4528); border-radius:999px; padding:.42em .95em; cursor:pointer;\n  box-shadow:0 3px 0 var(--gfx-line, #6B4528); transition:translate .1s ease, box-shadow .1s ease, background .15s ease; }\n.gfx-load-games button:not(.gfx-game-board > *, .gfx-shop-oven):hover:not(:disabled) { background:color-mix(in srgb,var(--gfx-pick, #FFE17A) 45%,var(--gfx-card, #FFFDF5)); }\n.gfx-load-games button:active:not(:disabled) { translate:0 2px; box-shadow:0 1px 0 var(--gfx-line, #6B4528); }\n.gfx-load-games button:disabled { cursor:default; }\n.gfx-load-games button[aria-pressed=\"true\"] { background:var(--gfx-pick, #FFE17A); }\n.gfx-load-games button:focus-visible, .gfx-game-board:focus-visible { outline:3px solid var(--gfx-accent, #F0763A); outline-offset:2px; }\n/* The game shelf: one card per game. */\n.gfx-game-nav { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:8px; margin-bottom:10px; padding:8px; border:3px solid var(--gfx-line, #6B4528); border-radius:22px;\n  background:color-mix(in srgb,var(--gfx-card, #FFFDF5) 94%,transparent); box-shadow:0 4px 0 var(--gfx-line, #6B4528); }\n.gfx-game-tab { display:flex; flex-direction:column; align-items:center; gap:1px; border-radius:16px !important; padding:.4em .75em !important; min-width:5.4em; }\n.gfx-game-tab i { font-style:normal; font-size:1.7em; line-height:1.15; }\n.gfx-game-tab span { font-size:.9em; white-space:nowrap; }\n.gfx-game-tab[aria-pressed=\"true\"] { background:var(--gfx-accent, #F0763A) !important; color:#fff !important; }\n.gfx-game-utils { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }\n.gfx-game-util { font-size:.82em !important; padding:.35em .8em !important; box-shadow:0 2px 0 var(--gfx-line, #6B4528) !important; }\n/* The game card. */\n.gfx-game-content:empty { display:none; }\n.gfx-game-content { background:var(--gfx-card, #FFFDF5); border:3px solid var(--gfx-line, #6B4528); border-radius:22px; padding:12px 14px 14px; box-shadow:0 5px 0 var(--gfx-line, #6B4528); }\n.gfx-game-head { display:flex; align-items:center; justify-content:space-between; gap:6px 10px; flex-wrap:wrap; margin-bottom:6px; }\n.gfx-game-title { display:flex; align-items:center; gap:.3em; font-size:1.12em; font-weight:normal; white-space:nowrap; }\n.gfx-game-title i { font-style:normal; }\n.gfx-game-stats { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }\n.gfx-game-stats { font-size:.86em; }\n.gfx-game-stats span { padding:.1em .6em; border-radius:999px; background:var(--gfx-ink, #FFF4D9); border:2px solid color-mix(in srgb,var(--gfx-line, #6B4528) 35%,transparent); font-variant-numeric:tabular-nums; white-space:nowrap; }\n.gfx-game-stats span[data-alert] { background:#FFD9D4; color:#A1281C; border-color:#E0786B; animation:gfx-game-blink .8s ease-in-out infinite; }\n@keyframes gfx-game-blink { 50% { opacity:.55; } }\n/* Level, new game and the game tool: one small row inside the header. */\n.gfx-game-tools { flex:1 1 auto; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:5px; font-size:.82em; }\n.gfx-game-tools > button { padding:.2em .75em; border-width:2px; box-shadow:0 2px 0 var(--gfx-line, #6B4528); }\n.gfx-game-levels { display:inline-flex; gap:2px; padding:2px; border:2px solid var(--gfx-line, #6B4528); border-radius:999px; background:var(--gfx-ink, #FFF4D9); }\n.gfx-game-levels button { line-height:1.2; padding:.16em .7em; border:0; background:transparent; box-shadow:none; }\n.gfx-game-levels button:active:not(:disabled) { translate:none; box-shadow:none; }\n.gfx-game-levels button[aria-checked=\"true\"] { background:var(--gfx-accent, #F0763A); color:#fff; }\n.gfx-game-new { background:var(--gfx-pick, #FFE17A) !important; }\n.gfx-game-flag[aria-pressed=\"true\"] { background:#FFD9D4 !important; }\n.gfx-game-info { min-height:1.5em; text-align:center; margin-bottom:8px; font-size:.95em; }\n.gfx-game-info b { font-weight:normal; padding:0 .4em; border-radius:999px; background:var(--gfx-ink, #FFF4D9); }\n.gfx-game-info b[data-ok] { background:#C9F0D6; color:#1C7A43; }\n.gfx-game-info b[data-over] { background:#FFD9D4; color:#A1281C; }\n/* The board: square cells sized from the board's own width. */\n.gfx-game-stage { position:relative; }\n.gfx-game-board { display:grid; grid-template-columns:repeat(var(--cols),minmax(0,1fr)); gap:4px; width:min(100%, max(170px, var(--room) * var(--fit, 1))); margin:auto; padding:6px; box-sizing:border-box;\n  border-radius:16px; background:color-mix(in srgb,var(--gfx-line, #6B4528) 16%,var(--gfx-ink, #FFF4D9)); touch-action:none; user-select:none; -webkit-user-select:none; container-type:inline-size; }\n.gfx-game-board > * { position:relative; aspect-ratio:1; min-width:0; min-height:0; padding:0 !important; display:grid; place-items:center; border-radius:9px !important; box-sizing:border-box;\n  font-size:calc(100cqw / var(--cols) * .46); line-height:1; }\n/* 지뢰찾기 */\n.gfx-game-board[data-kind=\"mines\"] > button { background:var(--gfx-pick, #FFE17A); border-width:2px; box-shadow:0 2px 0 var(--gfx-line, #6B4528); }\n.gfx-game-board[data-kind=\"mines\"] > button[data-open=\"true\"] { background:var(--gfx-card, #FFFDF5); border-color:color-mix(in srgb,var(--gfx-line, #6B4528) 25%,transparent); box-shadow:none; translate:none; }\n.gfx-game-board > button[data-mine=\"true\"]::before { content:\"\"; width:52%; aspect-ratio:1; border-radius:50%; background:#262626;\n  box-shadow:0 0 0 .12em #1f1f1f, 0 -.28em 0 -.16em #1f1f1f, 0 .28em 0 -.16em #1f1f1f, .28em 0 0 -.16em #1f1f1f, -.28em 0 0 -.16em #1f1f1f; }\n.gfx-game-board > button[data-boom=\"true\"] { background:#FF6B5E !important; animation:gfx-game-shake .35s ease; }\n.gfx-game-board > button[data-wrong=\"true\"] { opacity:.45; }\n@keyframes gfx-game-shake { 25% { translate:-3px 0; } 75% { translate:3px 0; } }\n.gfx-game-board button[data-flag=\"true\"] { font-size:0 !important; background:var(--gfx-card, #FFFDF5); }\n.gfx-game-board button[data-flag=\"true\"]::before { content:\"\"; position:absolute; left:34%; top:18%; height:62%; border-left:3px solid #432e23; }\n.gfx-game-board button[data-flag=\"true\"]::after { content:\"\"; position:absolute; left:calc(34% + 3px); top:18%; width:42%; height:36%; background:#e13f35; clip-path:polygon(0 0,100% 25%,0 100%); }\n/* 사과 상자 */\n.gfx-game-board[data-kind=\"fruits\"] { gap:2px; position:relative; }\n.gfx-game-board > .gfx-fruit-frame { position:absolute; z-index:2; aspect-ratio:auto; display:block; pointer-events:none; box-sizing:border-box; border-radius:14px !important;\n  border:4px solid var(--gfx-accent, #F0763A); background:color-mix(in srgb,var(--gfx-accent, #F0763A) 22%,transparent); box-shadow:0 0 0 2px #fff, 0 0 14px color-mix(in srgb,var(--gfx-accent, #F0763A) 70%,transparent);\n  transition:left .06s linear, top .06s linear, width .06s linear, height .06s linear; }\n.gfx-game-board > .gfx-fruit-frame[hidden] { display:none; }\n\n.gfx-game-board > .gfx-fruit-frame[data-state=\"ok\"] { border-color:#2FA95E; background:color-mix(in srgb,#2FA95E 26%,transparent); box-shadow:0 0 0 2px #fff, 0 0 16px #2FA95EAA; }\n\n.gfx-game-board > .gfx-fruit-frame[data-state=\"over\"] { border-color:#E0483C; background:color-mix(in srgb,#E0483C 16%,transparent); box-shadow:0 0 0 2px #fff; }\n\n/* A sticker-outlined apple (stem, leaf, shine) drawn once as an SVG; the number sits on its belly. */\n.gfx-game-board[data-kind=\"fruits\"] > button, .gfx-game-board[data-kind=\"fruits\"] > button:active:not(:disabled) { background:transparent; border:0; box-shadow:none; translate:none; border-radius:28% !important; transition:background .12s ease; }\n.gfx-game-board[data-kind=\"fruits\"] > button::before { content:\"\"; position:absolute; inset:2%; background:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='50' cy='93' rx='26' ry='4' fill='%236B4528' opacity='.18'/%3E%3Cpath d='M50 31C40 22 16 22 13 47 10 72 29 92 42 91c3-.3 5-1.4 8-1.4s5 1.1 8 1.4c13 1 32-19 29-44C84 22 60 22 50 31Z' fill='%23EF4B3F' stroke='%236B2318' stroke-width='3.5' stroke-linejoin='round'/%3E%3Cpath d='M27 40c-4 6-5 13-3 19' fill='none' stroke='%23fff' stroke-width='5' stroke-linecap='round' opacity='.55'/%3E%3Ccircle cx='31' cy='34' r='3' fill='%23fff' opacity='.6'/%3E%3Cpath d='M50 31c0-7 1-13 4-18' fill='none' stroke='%236B4528' stroke-width='4.5' stroke-linecap='round'/%3E%3Cpath d='M54 18c6-9 19-10 26-5-5 9-17 11-26 5Z' fill='%237ED36A' stroke='%233E7A33' stroke-width='3' stroke-linejoin='round'/%3E%3Cpath d='M57 17c6-2 12-3 18-3' fill='none' stroke='%233E7A33' stroke-width='1.8' stroke-linecap='round' opacity='.7'/%3E%3C/svg%3E\") center / contain no-repeat; transition:scale .14s cubic-bezier(.3,1.6,.5,1), filter .12s ease; }\n.gfx-game-board[data-kind=\"fruits\"] > button span { position:relative; z-index:1; margin-top:22%; color:#fff; font-size:calc(100cqw / var(--cols) * .36); letter-spacing:0;\n  -webkit-text-stroke:.16em #6B2318; paint-order:stroke fill; }\n.gfx-game-board[data-kind=\"fruits\"] > button[data-empty=\"true\"]::before { display:none; }\n.gfx-game-board[data-kind=\"fruits\"] > button[data-selected=\"true\"]::before { scale:1.1; filter:brightness(1.08); }\n.gfx-game-board[data-kind=\"fruits\"] > button[data-hint=\"true\"] { background:color-mix(in srgb,#FFD84D 55%,transparent); }\n.gfx-game-board[data-kind=\"fruits\"] > button[data-hint=\"true\"]::before { animation:gfx-game-hint .5s ease-in-out infinite alternate; }\n@keyframes gfx-game-hint { to { scale:1.12; } }\n/* 2048 */\n.gfx-game-board[data-kind=\"merge\"] { gap:6px; padding:8px; }\n.gfx-game-board[data-kind=\"merge\"] > div { background:color-mix(in srgb,var(--gfx-card, #FFFDF5) 60%,transparent); color:#5A3A24; font-size:calc(100cqw / var(--cols) * .36); }\n.gfx-game-board[data-kind=\"merge\"] > div[data-d=\"3\"] { font-size:calc(100cqw / var(--cols) * .3); } .gfx-game-board[data-kind=\"merge\"] > div[data-d=\"4\"] { font-size:calc(100cqw / var(--cols) * .24); }\n.gfx-game-board[data-kind=\"merge\"] > div[data-d=\"5\"] { font-size:calc(100cqw / var(--cols) * .2); }\n.gfx-game-board[data-kind=\"merge\"] > div:not([data-v=\"0\"]) { border:2px solid var(--gfx-line, #6B4528); box-shadow:0 3px 0 var(--gfx-line, #6B4528); }\n.gfx-game-board > div[data-v=\"2\"] { background:#FFF6DF; } .gfx-game-board > div[data-v=\"4\"] { background:#FFE7AE; } .gfx-game-board > div[data-v=\"8\"] { background:#FFC27A; color:#fff; }\n.gfx-game-board > div[data-v=\"16\"] { background:#FF9F68; color:#fff; } .gfx-game-board > div[data-v=\"32\"] { background:#FF7F6E; color:#fff; } .gfx-game-board > div[data-v=\"64\"] { background:#F25C5C; color:#fff; }\n.gfx-game-board > div[data-v=\"128\"] { background:#FFD84D; color:#fff; } .gfx-game-board > div[data-v=\"256\"] { background:#FFC933; color:#fff; } .gfx-game-board > div[data-v=\"512\"] { background:#FFB81C; color:#fff; }\n.gfx-game-board > div[data-v=\"1024\"] { background:#8FD16B; color:#fff; } .gfx-game-board > div[data-v=\"2048\"] { background:#4FC1A0; color:#fff; }\n.gfx-game-board[data-kind=\"merge\"] > div:not([data-v=\"0\"]):is([data-v^=\"4096\"],[data-v^=\"8192\"],[data-v^=\"16384\"],[data-v^=\"32768\"],[data-v^=\"65536\"]) { background:#8C6CF0; color:#fff; }\n.gfx-game-board[data-kind=\"merge\"] > div:is([data-v=\"8\"],[data-v=\"16\"],[data-v=\"32\"],[data-v=\"64\"],[data-v=\"128\"],[data-v=\"256\"],[data-v=\"512\"],[data-v=\"1024\"],[data-v=\"2048\"]) { text-shadow:0 .05em 0 #0003; }\n.gfx-game-board > div[data-new] { animation:gfx-tile-in .18s ease both; }\n.gfx-game-board > div[data-merged] { animation:gfx-tile-pop .2s ease both; }\n@keyframes gfx-tile-in { from { scale:.3; opacity:0; } }\n@keyframes gfx-tile-pop { 50% { scale:1.14; } }\n.gfx-game-pad { position:absolute; right:0; bottom:0; display:grid; grid-template-columns:repeat(3,2.4em); grid-template-areas:\". up .\" \"left down right\"; gap:4px; }\n.gfx-game-pad button { padding:.25em 0 !important; border-radius:12px !important; }\n.gfx-game-pad [data-dir=\"up\"] { grid-area:up; } .gfx-game-pad [data-dir=\"left\"] { grid-area:left; } .gfx-game-pad [data-dir=\"down\"] { grid-area:down; } .gfx-game-pad [data-dir=\"right\"] { grid-area:right; }\n@media (pointer:coarse) { .gfx-game-pad { display:none; } }\n/* 짝 맞추기 */\n.gfx-game-board[data-kind=\"memory\"] { gap:6px; }\n.gfx-game-board[data-kind=\"memory\"] > button { aspect-ratio:3 / 4; border-radius:12px !important; overflow:hidden; background:var(--gfx-card, #FFFDF5); border-width:2.5px; box-shadow:0 3px 0 var(--gfx-line, #6B4528); }\n.gfx-game-board[data-kind=\"memory\"] > button > span { position:absolute; inset:0; display:grid; place-items:center; transition:opacity .18s ease, scale .22s cubic-bezier(.3,1.5,.5,1); }\n.gfx-game-board[data-kind=\"memory\"] > button > .back { background:var(--gfx-accent, #F0763A); box-shadow:inset 0 0 0 .3em color-mix(in srgb,#fff 35%,var(--gfx-accent, #F0763A)); }\n.gfx-game-board[data-kind=\"memory\"] > button > .face { opacity:0; scale:.6; padding:6%; box-sizing:border-box; }\n.gfx-game-board[data-kind=\"memory\"] > button > .face img { width:100%; height:100%; object-fit:contain; object-position:50% 100%; }\n.gfx-game-board[data-kind=\"memory\"] > button > .face i { font-style:normal; font-size:calc(100cqw / var(--cols) * .5); }\n.gfx-game-board[data-kind=\"memory\"] > button[data-open=\"true\"] > .face { opacity:1; scale:1; }\n.gfx-game-board[data-kind=\"memory\"] > button[data-open=\"true\"] > .back { opacity:0; scale:.6; }\n.gfx-game-board[data-kind=\"memory\"] > button[data-done=\"true\"] { background:color-mix(in srgb,#C9F0D6 70%,var(--gfx-card, #FFFDF5)); border-color:#2FA95E; box-shadow:0 3px 0 #2FA95E; }\n/* Theme pieces: the box game's fruit and the minesweeper board follow the chosen 말랑 colour preset. */\n.gfx-load-games[data-theme=\"berry\"] .gfx-game-board[data-kind=\"fruits\"] > button::before { background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='50' cy='93' rx='26' ry='4' fill='%233A2A20' opacity='.18'/%3E%3Cpath d='M50 93C31 86 12 64 14 43 16 28 31 25 50 30 69 25 84 28 86 43 88 64 69 86 50 93Z' fill='%23F0456A' stroke='%237A1E33' stroke-width='3.5' stroke-linejoin='round'/%3E%3Cellipse cx='28' cy='48' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='42' cy='44' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='58' cy='44' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='72' cy='48' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='24' cy='62' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='38' cy='60' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='52' cy='62' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='66' cy='60' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='78' cy='62' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='34' cy='74' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='48' cy='76' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='62' cy='74' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='44' cy='86' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='56' cy='86' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cpath d='M27 46c-3 5-3 11-1 16' fill='none' stroke='%23fff' stroke-width='4.5' stroke-linecap='round' opacity='.55'/%3E%3Cpath d='M50 34 40 38 30 33 38 27 32 19 44 22 50 13 56 22 68 19 62 27 70 33 60 38Z' fill='%236CC25E' stroke='%232F6E2A' stroke-width='3' stroke-linejoin='round'/%3E%3Cpath d='M50 22c0-5 1-9 3-12' fill='none' stroke='%232F6E2A' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E\"); }\n.gfx-load-games[data-theme=\"berry\"] .gfx-game-board[data-kind=\"fruits\"] > button span { -webkit-text-stroke-color:#7A1E33; }\n.gfx-load-games[data-theme=\"mint\"] .gfx-game-board[data-kind=\"fruits\"] > button::before { background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='50' cy='93' rx='26' ry='4' fill='%233A2A20' opacity='.18'/%3E%3Cpath d='M50 31C40 22 16 22 13 47 10 72 29 92 42 91c3-.3 5-1.4 8-1.4s5 1.1 8 1.4c13 1 32-19 29-44C84 22 60 22 50 31Z' fill='%238ACF4E' stroke='%232F5E1C' stroke-width='3.5' stroke-linejoin='round'/%3E%3Cpath d='M27 40c-4 6-5 13-3 19' fill='none' stroke='%23fff' stroke-width='5' stroke-linecap='round' opacity='.6'/%3E%3Ccircle cx='31' cy='34' r='3' fill='%23fff' opacity='.65'/%3E%3Cpath d='M50 31c0-7 1-13 4-18' fill='none' stroke='%236B4528' stroke-width='4.5' stroke-linecap='round'/%3E%3Cpath d='M54 18c6-9 19-10 26-5-5 9-17 11-26 5Z' fill='%233FA56B' stroke='%231F5E3A' stroke-width='3' stroke-linejoin='round'/%3E%3Ccircle cx='70' cy='70' r='3.2' fill='%235A3A24' opacity='.85'/%3E%3Ccircle cx='30' cy='72' r='2.6' fill='%235A3A24' opacity='.85'/%3E%3Ccircle cx='62' cy='50' r='2.4' fill='%235A3A24' opacity='.85'/%3E%3C/svg%3E\"); }\n.gfx-load-games[data-theme=\"mint\"] .gfx-game-board[data-kind=\"fruits\"] > button span { -webkit-text-stroke-color:#2F5E1C; }\n.gfx-load-games[data-theme=\"lavender\"] .gfx-game-board[data-kind=\"fruits\"] > button::before { background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='50' cy='93' rx='26' ry='4' fill='%233A2A20' opacity='.18'/%3E%3Cpath d='M52 24c0-6 2-11 6-15' fill='none' stroke='%236B4528' stroke-width='4.5' stroke-linecap='round'/%3E%3Cpath d='M56 16c8-8 20-6 25 0-7 8-18 8-25 0Z' fill='%237ED36A' stroke='%233E7A33' stroke-width='3' stroke-linejoin='round'/%3E%3Ccircle cx='30' cy='34' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='26' cy='30' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='50' cy='32' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='46' cy='28' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='70' cy='34' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='66' cy='30' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='22' cy='52' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='18' cy='48' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='40' cy='50' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='36' cy='46' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='60' cy='50' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='56' cy='46' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='78' cy='52' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='74' cy='48' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='31' cy='68' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='27' cy='64' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='50' cy='67' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='46' cy='63' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='69' cy='68' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='65' cy='64' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='40' cy='84' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='36' cy='80' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='60' cy='84' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='56' cy='80' r='2.6' fill='%23fff' opacity='.7'/%3E%3C/svg%3E\"); }\n.gfx-load-games[data-theme=\"lavender\"] .gfx-game-board[data-kind=\"fruits\"] > button span { -webkit-text-stroke-color:#3D2470; }\n.gfx-load-games[data-theme=\"night\"] .gfx-game-board[data-kind=\"fruits\"] > button::before { background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='50' cy='93' rx='24' ry='4' fill='%23000' opacity='.25'/%3E%3Cpath d='M45.8 17.4Q50 10 54.2 17.4L61.6 30.2Q64.1 34.6 69.1 35.6L83.5 38.7Q91.8 40.4 86.1 46.7L76.2 57.6Q72.8 61.4 73.4 66.5L75 81.1Q75.9 89.6 68.1 86.1L54.7 80.1Q50 78 45.3 80.1L31.9 86.1Q24.1 89.6 25 81.1L26.6 66.5Q27.2 61.4 23.8 57.6L13.9 46.7Q8.2 40.4 16.5 38.7L30.9 35.6Q35.9 34.6 38.4 30.2Z' fill='%23FFCF3D' stroke='%238A5A00' stroke-width='3.5' stroke-linejoin='round'/%3E%3Cpath d='M38 40c-3 3-4 7-4 11' fill='none' stroke='%23fff' stroke-width='4' stroke-linecap='round' opacity='.75'/%3E%3Ccircle cx='85' cy='15' r='4' fill='%23FFF6C2'/%3E%3Ccircle cx='13' cy='76' r='3' fill='%23FFF6C2'/%3E%3C/svg%3E\"); }\n.gfx-load-games[data-theme=\"night\"] .gfx-game-board[data-kind=\"fruits\"] > button span { -webkit-text-stroke-color:#7A4E00; }\n.gfx-load-games[data-theme=\"lavender\"] .gfx-game-board[data-kind=\"fruits\"] > button span { margin-top:30%; }\n.gfx-load-games[data-theme=\"night\"] .gfx-game-board[data-kind=\"fruits\"] > button span { margin-top:14%; }\n.gfx-load-games[data-theme=\"berry\"] .gfx-game-board[data-kind=\"fruits\"] > button span { margin-top:26%; }\n/* Minesweeper palettes: covered tile (two stops), opened tile, its rim, the board, the flag and the eight numbers. */\n.gfx-load-games { --mc1:#FFF3C4; --mc2:#FFD86B; --mo:#FFFDF5; --mol:#E8D9BE; --mb:#E8D9BE; --mflag:#E13F35;\n  --n1:#2F6FD6; --n2:#2E8B43; --n3:#D23B3B; --n4:#6A3FB5; --n5:#A0522D; --n6:#13817F; --n7:#333; --n8:#777; }\n.gfx-load-games[data-theme=\"berry\"] { --mc1:#FFE1EA; --mc2:#FFAEC6; --mo:#FFF8FA; --mol:#F6CFDC; --mb:#F3C6D4; --mflag:#D91E4F; }\n.gfx-load-games[data-theme=\"mint\"] { --mc1:#DDF8EA; --mc2:#8FDDBA; --mo:#F6FFFA; --mol:#C4E9D7; --mb:#BFE4D2; --mflag:#6B4528; }\n.gfx-load-games[data-theme=\"lavender\"] { --mc1:#EFE8FF; --mc2:#C3AEFF; --mo:#FCFBFF; --mol:#DCD0F7; --mb:#D5C8F5; --mflag:#E0483C; }\n.gfx-load-games[data-theme=\"night\"] { --mc1:#5C6299; --mc2:#3E4374; --mo:#22253D; --mol:#3B4068; --mb:#171A2E; --mflag:#FFD166;\n  --n1:#8EC5FF; --n2:#8EE6A8; --n3:#FF9B9B; --n4:#D3B5FF; --n5:#FFC48A; --n6:#7FE0DA; --n7:#F0F0F0; --n8:#BBBBBB; }\n.gfx-game-board[data-kind=\"mines\"] { background:var(--mb); }\n/* Solid tiles; the lighter shade is a top edge, not a gradient. */\n.gfx-game-board[data-kind=\"mines\"] > button { background:var(--mc2); box-shadow:inset 0 3px 0 var(--mc1), 0 2px 0 var(--gfx-line, #6B4528); }\n.gfx-load-games[data-theme=\"night\"] .gfx-game-board[data-kind=\"mines\"] > button:not([data-open=\"true\"]) {\n  background:var(--mc2); box-shadow:inset 0 3px 0 var(--mc1), 0 2px 0 #14162A; border-color:#14162A; box-shadow:0 2px 0 #14162A; }\n.gfx-game-board[data-kind=\"mines\"] > button[data-open=\"true\"] { background:var(--mo); border-color:var(--mol); }\n.gfx-game-board > button[data-n=\"1\"] { color:var(--n1); } .gfx-game-board > button[data-n=\"2\"] { color:var(--n2); } .gfx-game-board > button[data-n=\"3\"] { color:var(--n3); }\n.gfx-game-board > button[data-n=\"4\"] { color:var(--n4); } .gfx-game-board > button[data-n=\"5\"] { color:var(--n5); } .gfx-game-board > button[data-n=\"6\"] { color:var(--n6); }\n.gfx-game-board > button[data-n=\"7\"] { color:var(--n7); } .gfx-game-board > button[data-n=\"8\"] { color:var(--n8); }\n.gfx-game-board[data-kind=\"mines\"] button[data-flag=\"true\"]::after { background:var(--mflag); }\n/* 밤하늘: a gold star instead of the flag, a glowing orb instead of the bomb. */\n.gfx-load-games[data-theme=\"night\"] .gfx-game-board[data-kind=\"mines\"] button[data-flag=\"true\"] { background:var(--mc2); }\n.gfx-load-games[data-theme=\"night\"] .gfx-game-board[data-kind=\"mines\"] button[data-flag=\"true\"]::before { display:none; }\n.gfx-load-games[data-theme=\"night\"] .gfx-game-board[data-kind=\"mines\"] button[data-flag=\"true\"]::after { left:18%; top:16%; width:64%; height:64%;\n  clip-path:none; -webkit-mask:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M45.6 12.3Q50 4 54.4 12.3L62 26.8Q64.7 31.8 70.3 32.7L86.4 35.5Q95.7 37.2 89.1 43.9L77.7 55.7Q73.8 59.7 74.6 65.3L76.9 81.5Q78.2 90.8 69.7 86.7L55.1 79.5Q50 77 44.9 79.5L30.3 86.7Q21.8 90.8 23.1 81.5L25.4 65.3Q26.2 59.7 22.3 55.7L10.9 43.9Q4.3 37.2 13.6 35.5L29.7 32.7Q35.3 31.8 38 26.8Z'/%3E%3C/svg%3E\") center / contain no-repeat; mask:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M45.6 12.3Q50 4 54.4 12.3L62 26.8Q64.7 31.8 70.3 32.7L86.4 35.5Q95.7 37.2 89.1 43.9L77.7 55.7Q73.8 59.7 74.6 65.3L76.9 81.5Q78.2 90.8 69.7 86.7L55.1 79.5Q50 77 44.9 79.5L30.3 86.7Q21.8 90.8 23.1 81.5L25.4 65.3Q26.2 59.7 22.3 55.7L10.9 43.9Q4.3 37.2 13.6 35.5L29.7 32.7Q35.3 31.8 38 26.8Z'/%3E%3C/svg%3E\") center / contain no-repeat; filter:drop-shadow(0 0 3px #FFD166); }\n.gfx-load-games[data-theme=\"night\"] .gfx-game-board > button[data-mine=\"true\"]::before { background:#8C6CF0;\n  box-shadow:0 0 .35em #9C82FF, 0 0 0 .1em #2A1F66; }\n/* 민트 초코: the mine is a chocolate chip. */\n.gfx-load-games[data-theme=\"mint\"] .gfx-game-board > button[data-mine=\"true\"]::before { width:56%; border-radius:52% 48% 46% 54% / 60% 58% 42% 40%;\n  background:#5A3A24; box-shadow:0 .08em 0 #2A180C; }\n/* The result card over the board; a tap beside it shows the board again. */\n.gfx-game-result { position:absolute; inset:0; display:grid; place-items:center; z-index:2; border-radius:16px; background:color-mix(in srgb,var(--gfx-ink, #FFF4D9) 45%,transparent); cursor:pointer; }\n.gfx-game-result[hidden] { display:none; }\n.gfx-game-result > div { display:grid; justify-items:center; gap:.35em; padding:1em 1.6em; background:var(--gfx-card, #FFFDF5); border:3px solid var(--gfx-line, #6B4528); border-radius:22px; box-shadow:0 5px 0 var(--gfx-line, #6B4528); cursor:default; animation:gfx-game-pop .35s cubic-bezier(.3,1.6,.5,1) both; }\n.gfx-game-result b { font-size:1.6em; font-weight:normal; color:var(--gfx-accent, #F0763A); }\n.gfx-game-result em { font-style:normal; padding:.1em .8em; border-radius:999px; background:#FFD84D; color:#5A3A10; }\n.gfx-game-again { background:var(--gfx-accent, #F0763A) !important; color:#fff !important; margin-top:.2em; }\n@keyframes gfx-game-pop { from { scale:.6; opacity:0; } }\n@media (prefers-reduced-motion: reduce) { .gfx-load-games *, .gfx-load-games *::before { animation:none !important; transition:none !important; } }\n/* Placement: a column of game cards on the right of the generation screen, the game beside it. */\n:host { position:absolute; inset:12px 12px 12px auto; width:min(880px,96%); z-index:5; display:block; pointer-events:none; container-type:size; }\n:host([data-game-large]) { width:calc(100% - 24px); }\n.gfx-load-games { height:100%; display:flex; flex-direction:row-reverse; align-items:flex-start; gap:10px; --room:calc(100cqh - 150px);\n  color:var(--gfx-text, #5A3A24); font:clamp(12px,1.5vw,16px)/1.35 var(--body, \"Jua\"), \"Malgun Gothic\", sans-serif; }\n.gfx-load-games > * { pointer-events:auto; }\n.gfx-game-nav { flex:0 0 112px; flex-direction:column; flex-wrap:nowrap; align-items:stretch; max-height:100%; overflow:auto; margin:0; box-sizing:border-box; }\n.gfx-game-utils { flex-direction:column; }\n.gfx-game-content { flex:1; min-width:0; max-height:100%; overflow:auto; box-sizing:border-box; }\n.gfx-game-board[data-kind=\"memory\"] > button > .face img { filter:drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 1px #fff); }\n@media (max-width:600px) { :host { inset:8px 8px 8px auto; } .gfx-load-games { gap:5px; } .gfx-game-nav { flex-basis:78px; padding:5px; } .gfx-game-tab i { font-size:1.3em !important; } }\n/* Theme games */\n/* 딸기 우유 레시피: one rounded pad per ingredient; it lights up in the order to repeat. */\n.gfx-game-board[data-kind=\"recipe\"] { gap:10px; padding:10px; }\n.gfx-game-board[data-kind=\"recipe\"] > button { aspect-ratio:1; border-radius:26px !important; border:3px solid var(--gfx-line, #6B4528); box-shadow:0 5px 0 var(--gfx-line, #6B4528);\n  font-size:calc(100cqw / var(--cols) * .17); color:#6A2E45; transition:scale .12s ease, filter .12s ease, box-shadow .12s ease; }\n.gfx-game-board[data-kind=\"recipe\"] > button:disabled { opacity:1; }\n.gfx-game-board[data-kind=\"recipe\"] > button[data-pad=\"0\"] { background:#F2557F; color:#fff; } .gfx-game-board[data-kind=\"recipe\"] > button[data-pad=\"1\"] { background:#FFFFFF; }\n.gfx-game-board[data-kind=\"recipe\"] > button[data-pad=\"2\"] { background:#FFE7A3; } .gfx-game-board[data-kind=\"recipe\"] > button[data-pad=\"3\"] { background:#BFE6FF; }\n.gfx-game-board[data-kind=\"recipe\"] > button[data-pad=\"4\"] { background:#FFF3D6; } .gfx-game-board[data-kind=\"recipe\"] > button[data-pad=\"5\"] { background:#FFD3E0; }\n.gfx-game-board[data-kind=\"recipe\"] > button[data-lit] { scale:1.08; filter:brightness(1.12); box-shadow:0 0 0 6px #fff, 0 0 0 9px #F2557F, 0 5px 0 var(--gfx-line, #6B4528); }\n/* 초코칩 터뜨리기: mint, chocolate and friends; the group under the pointer lifts. */\n.gfx-game-board[data-kind=\"pop\"] { gap:3px; }\n.gfx-game-board[data-kind=\"pop\"] > button { border:2px solid #0003; box-shadow:none; border-radius:30% !important; transition:scale .12s ease; }\n.gfx-game-board[data-kind=\"pop\"] > button[data-v=\"0\"] { visibility:hidden; }\n.gfx-game-board[data-kind=\"pop\"] > button[data-v=\"1\"] { background:#8FDDBA; } .gfx-game-board[data-kind=\"pop\"] > button[data-v=\"2\"] { background:#6B4528; }\n.gfx-game-board[data-kind=\"pop\"] > button[data-v=\"3\"] { background:#FFF3D6; } .gfx-game-board[data-kind=\"pop\"] > button[data-v=\"4\"] { background:#F7A8C4; }\n.gfx-game-board[data-kind=\"pop\"] > button[data-v=\"5\"] { background:#9CC9F5; }\n.gfx-game-board[data-kind=\"pop\"] > button[data-v=\"1\"]::after { content:\"\"; width:18%; aspect-ratio:1; border-radius:50%; background:#3E2616; box-shadow:.5em .35em 0 -.05em #3E2616; translate:-.2em -.15em; }\n.gfx-game-board[data-kind=\"pop\"] > button[data-group=\"true\"] { scale:1.1; z-index:1; outline:3px solid #fff; outline-offset:-1px; }\n/* 꽃밭 퍼즐: lavender tiles; a tile in its place turns deeper. */\n.gfx-game-board[data-kind=\"slide\"] { gap:6px; padding:8px; }\n.gfx-game-board[data-kind=\"slide\"] > button { background:#C9B6FF; color:#fff; border:2.5px solid #4F3F85; box-shadow:0 3px 0 #4F3F85; border-radius:16px !important;\n  font-size:calc(100cqw / var(--cols) * .36); -webkit-text-stroke:.12em #4F3F85; paint-order:stroke fill; }\n.gfx-game-board[data-kind=\"slide\"] > button::after { content:\"\"; position:absolute; right:12%; top:12%; width:14%; aspect-ratio:1; border-radius:50%; background:#fff; opacity:.7;\n  box-shadow:-.32em 0 0 -.02em #FFE7A3, 0 .32em 0 -.02em #fff; }\n.gfx-game-board[data-kind=\"slide\"] > button[data-home=\"true\"] { background:#9A7BEA; }\n.gfx-game-board[data-kind=\"slide\"] > button[data-blank=\"true\"] { visibility:hidden; }\n/* 별 밝히기: dim stars that light up gold. */\n.gfx-game-board[data-kind=\"lights\"] { background:#171A2E; gap:6px; padding:8px; }\n.gfx-game-board[data-kind=\"lights\"] > button { background:#262A45; border:2px solid #3B4068; box-shadow:none; border-radius:14px !important; }\n.gfx-game-board[data-kind=\"lights\"] > button::before { content:\"\"; width:72%; aspect-ratio:1; background:#4A4F80; -webkit-mask:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M45.6 12.3Q50 4 54.4 12.3L62 26.8Q64.7 31.8 70.3 32.7L86.4 35.5Q95.7 37.2 89.1 43.9L77.7 55.7Q73.8 59.7 74.6 65.3L76.9 81.5Q78.2 90.8 69.7 86.7L55.1 79.5Q50 77 44.9 79.5L30.3 86.7Q21.8 90.8 23.1 81.5L25.4 65.3Q26.2 59.7 22.3 55.7L10.9 43.9Q4.3 37.2 13.6 35.5L29.7 32.7Q35.3 31.8 38 26.8Z'/%3E%3C/svg%3E\") center / contain no-repeat; mask:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M45.6 12.3Q50 4 54.4 12.3L62 26.8Q64.7 31.8 70.3 32.7L86.4 35.5Q95.7 37.2 89.1 43.9L77.7 55.7Q73.8 59.7 74.6 65.3L76.9 81.5Q78.2 90.8 69.7 86.7L55.1 79.5Q50 77 44.9 79.5L30.3 86.7Q21.8 90.8 23.1 81.5L25.4 65.3Q26.2 59.7 22.3 55.7L10.9 43.9Q4.3 37.2 13.6 35.5L29.7 32.7Q35.3 31.8 38 26.8Z'/%3E%3C/svg%3E\") center / contain no-repeat;\n  transition:background .2s ease, scale .2s cubic-bezier(.3,1.6,.5,1), filter .2s ease; scale:.85; }\n.gfx-game-board[data-kind=\"lights\"] > button[data-on=\"true\"]::before { background:#FFD166; scale:1; filter:drop-shadow(0 0 4px #FFD166); }\n.gfx-game-board > button:hover:not(:disabled) { filter:brightness(1.05); }\n/* Nine games: a two-column shelf of compact cards. */\n.gfx-game-nav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-content:start; flex:0 0 164px; gap:6px; padding:7px; }\n.gfx-game-tab { min-width:0 !important; padding:.3em .2em !important; gap:0; border-radius:14px !important; }\n.gfx-game-tab i { font-size:1.35em; }\n.gfx-game-tab span { font-size:.76em; white-space:normal; line-height:1.15; text-align:center; word-break:keep-all; }\n.gfx-game-utils { grid-column:1 / -1; flex-direction:row; flex-wrap:wrap; }\n.gfx-game-utils > button { flex:1; }\n@media (max-width:600px) { .gfx-game-nav { flex-basis:120px; padding:4px; gap:4px; } .gfx-game-tab span { font-size:.68em; } .gfx-game-tab i { font-size:1.1em !important; } }\n.gfx-game-utils > .gfx-game-util { white-space:nowrap; font-size:.74em !important; padding:.3em .4em !important; }\n/* 스네이크's food: the theme's piece. */\n.gfx-load-games { --gfx-piece:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='50' cy='93' rx='26' ry='4' fill='%236B4528' opacity='.18'/%3E%3Cpath d='M50 31C40 22 16 22 13 47 10 72 29 92 42 91c3-.3 5-1.4 8-1.4s5 1.1 8 1.4c13 1 32-19 29-44C84 22 60 22 50 31Z' fill='%23EF4B3F' stroke='%236B2318' stroke-width='3.5' stroke-linejoin='round'/%3E%3Cpath d='M27 40c-4 6-5 13-3 19' fill='none' stroke='%23fff' stroke-width='5' stroke-linecap='round' opacity='.55'/%3E%3Ccircle cx='31' cy='34' r='3' fill='%23fff' opacity='.6'/%3E%3Cpath d='M50 31c0-7 1-13 4-18' fill='none' stroke='%236B4528' stroke-width='4.5' stroke-linecap='round'/%3E%3Cpath d='M54 18c6-9 19-10 26-5-5 9-17 11-26 5Z' fill='%237ED36A' stroke='%233E7A33' stroke-width='3' stroke-linejoin='round'/%3E%3Cpath d='M57 17c6-2 12-3 18-3' fill='none' stroke='%233E7A33' stroke-width='1.8' stroke-linecap='round' opacity='.7'/%3E%3C/svg%3E\"); }\n.gfx-load-games[data-theme=\"berry\"] { --gfx-piece:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='50' cy='93' rx='26' ry='4' fill='%233A2A20' opacity='.18'/%3E%3Cpath d='M50 93C31 86 12 64 14 43 16 28 31 25 50 30 69 25 84 28 86 43 88 64 69 86 50 93Z' fill='%23F0456A' stroke='%237A1E33' stroke-width='3.5' stroke-linejoin='round'/%3E%3Cellipse cx='28' cy='48' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='42' cy='44' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='58' cy='44' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='72' cy='48' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='24' cy='62' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='38' cy='60' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='52' cy='62' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='66' cy='60' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='78' cy='62' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='34' cy='74' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='48' cy='76' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='62' cy='74' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='44' cy='86' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cellipse cx='56' cy='86' rx='1.6' ry='2.4' fill='%23FFE58A'/%3E%3Cpath d='M27 46c-3 5-3 11-1 16' fill='none' stroke='%23fff' stroke-width='4.5' stroke-linecap='round' opacity='.55'/%3E%3Cpath d='M50 34 40 38 30 33 38 27 32 19 44 22 50 13 56 22 68 19 62 27 70 33 60 38Z' fill='%236CC25E' stroke='%232F6E2A' stroke-width='3' stroke-linejoin='round'/%3E%3Cpath d='M50 22c0-5 1-9 3-12' fill='none' stroke='%232F6E2A' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E\"); }\n.gfx-load-games[data-theme=\"mint\"] { --gfx-piece:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='50' cy='93' rx='26' ry='4' fill='%233A2A20' opacity='.18'/%3E%3Cpath d='M50 31C40 22 16 22 13 47 10 72 29 92 42 91c3-.3 5-1.4 8-1.4s5 1.1 8 1.4c13 1 32-19 29-44C84 22 60 22 50 31Z' fill='%238ACF4E' stroke='%232F5E1C' stroke-width='3.5' stroke-linejoin='round'/%3E%3Cpath d='M27 40c-4 6-5 13-3 19' fill='none' stroke='%23fff' stroke-width='5' stroke-linecap='round' opacity='.6'/%3E%3Ccircle cx='31' cy='34' r='3' fill='%23fff' opacity='.65'/%3E%3Cpath d='M50 31c0-7 1-13 4-18' fill='none' stroke='%236B4528' stroke-width='4.5' stroke-linecap='round'/%3E%3Cpath d='M54 18c6-9 19-10 26-5-5 9-17 11-26 5Z' fill='%233FA56B' stroke='%231F5E3A' stroke-width='3' stroke-linejoin='round'/%3E%3Ccircle cx='70' cy='70' r='3.2' fill='%235A3A24' opacity='.85'/%3E%3Ccircle cx='30' cy='72' r='2.6' fill='%235A3A24' opacity='.85'/%3E%3Ccircle cx='62' cy='50' r='2.4' fill='%235A3A24' opacity='.85'/%3E%3C/svg%3E\"); }\n.gfx-load-games[data-theme=\"lavender\"] { --gfx-piece:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='50' cy='93' rx='26' ry='4' fill='%233A2A20' opacity='.18'/%3E%3Cpath d='M52 24c0-6 2-11 6-15' fill='none' stroke='%236B4528' stroke-width='4.5' stroke-linecap='round'/%3E%3Cpath d='M56 16c8-8 20-6 25 0-7 8-18 8-25 0Z' fill='%237ED36A' stroke='%233E7A33' stroke-width='3' stroke-linejoin='round'/%3E%3Ccircle cx='30' cy='34' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='26' cy='30' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='50' cy='32' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='46' cy='28' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='70' cy='34' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='66' cy='30' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='22' cy='52' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='18' cy='48' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='40' cy='50' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='36' cy='46' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='60' cy='50' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='56' cy='46' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='78' cy='52' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='74' cy='48' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='31' cy='68' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='27' cy='64' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='50' cy='67' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='46' cy='63' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='69' cy='68' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='65' cy='64' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='40' cy='84' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='36' cy='80' r='2.6' fill='%23fff' opacity='.7'/%3E%3Ccircle cx='60' cy='84' r='11' fill='%239A6CE8' stroke='%233D2470' stroke-width='3'/%3E%3Ccircle cx='56' cy='80' r='2.6' fill='%23fff' opacity='.7'/%3E%3C/svg%3E\"); }\n.gfx-load-games[data-theme=\"night\"] { --gfx-piece:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cellipse cx='50' cy='93' rx='24' ry='4' fill='%23000' opacity='.25'/%3E%3Cpath d='M45.8 17.4Q50 10 54.2 17.4L61.6 30.2Q64.1 34.6 69.1 35.6L83.5 38.7Q91.8 40.4 86.1 46.7L76.2 57.6Q72.8 61.4 73.4 66.5L75 81.1Q75.9 89.6 68.1 86.1L54.7 80.1Q50 78 45.3 80.1L31.9 86.1Q24.1 89.6 25 81.1L26.6 66.5Q27.2 61.4 23.8 57.6L13.9 46.7Q8.2 40.4 16.5 38.7L30.9 35.6Q35.9 34.6 38.4 30.2Z' fill='%23FFCF3D' stroke='%238A5A00' stroke-width='3.5' stroke-linejoin='round'/%3E%3Cpath d='M38 40c-3 3-4 7-4 11' fill='none' stroke='%23fff' stroke-width='4' stroke-linecap='round' opacity='.75'/%3E%3Ccircle cx='85' cy='15' r='4' fill='%23FFF6C2'/%3E%3Ccircle cx='13' cy='76' r='3' fill='%23FFF6C2'/%3E%3C/svg%3E\"); }\n/* 스네이크: the theme's piece is the food. */\n.gfx-game-board[data-kind=\"snake\"] { gap:1px; padding:6px; background:var(--mb, #E8D9BE); }\n.gfx-game-board[data-kind=\"snake\"] > div { border-radius:30% !important; background:color-mix(in srgb,var(--gfx-card, #FFFDF5) 45%,transparent); }\n.gfx-game-board[data-kind=\"snake\"] > div[data-s=\"body\"] { background:var(--gfx-accent, #F0763A); border-radius:34% !important; }\n.gfx-game-board[data-kind=\"snake\"] > div[data-s=\"head\"] { background:color-mix(in srgb,var(--gfx-accent, #F0763A) 70%,var(--gfx-line, #6B4528)); border-radius:40% !important; }\n.gfx-game-board[data-kind=\"snake\"] > div[data-s=\"head\"]::after { content:\"\"; width:18%; aspect-ratio:1; border-radius:50%; background:#fff; box-shadow:.45em 0 0 #fff; translate:-.22em 0; font-size:inherit; }\n.gfx-game-board[data-kind=\"snake\"] > div[data-s=\"food\"]::before { content:\"\"; position:absolute; inset:-8%; background:var(--gfx-piece) center / contain no-repeat; }\n/* 쿠키 가게: the shop front (awning, sign, window, menu board, guests, counter), the tool shelf, the ovens. */\n.gfx-game-board[data-kind=\"shop\"] { position:relative; display:flex; flex-direction:column; gap:0; padding:0; overflow:hidden; background:#F3E3C8; border:3px solid var(--gfx-line, #6B4528); container-type:inline-size; }\n.gfx-game-board[data-kind=\"shop\"] > * { aspect-ratio:auto; place-items:normal; font-size:inherit; line-height:1.3; border-radius:0 !important; }\n.gfx-shop-front { position:relative; display:block !important; height:clamp(150px,50cqw,250px); overflow:hidden; background:repeating-linear-gradient(90deg,#FCE6CF 0 14px,#F8DDC2 14px 28px); }\n.gfx-load-games[data-theme=\"night\"] .gfx-shop-front { background:repeating-linear-gradient(90deg,#3B3F66 0 14px,#363A5E 14px 28px); }\n.gfx-shop-awning { position:absolute; inset:0 0 auto; height:24px; filter:drop-shadow(0 2.5px 0 var(--gfx-line, #6B4528)); z-index:1; }\n.gfx-shop-awning::before { content:\"\"; position:absolute; inset:0; background:repeating-linear-gradient(90deg,var(--gfx-accent, #F0763A) 0 24px,#fff 24px 48px);\n  -webkit-mask:radial-gradient(12px at 12px 12px,#000 98%,#0000) 0 100% / 24px 100% repeat-x, linear-gradient(#000 0 0) top / 100% 12px no-repeat;\n  mask:radial-gradient(12px at 12px 12px,#000 98%,#0000) 0 100% / 24px 100% repeat-x, linear-gradient(#000 0 0) top / 100% 12px no-repeat; }\n.gfx-shop-sign { position:absolute; left:50%; top:3px; translate:-50% 0; z-index:2; padding:.12em .9em; border-radius:10px; font-weight:normal; white-space:nowrap; font-size:max(11px,3.4cqw);\n  background:#8A5A33; color:#FFF4D9; border:3px solid var(--gfx-line, #6B4528); box-shadow:0 3px 0 var(--gfx-line, #6B4528), inset 0 -4px 0 #74482A; letter-spacing:.05em; }\n.gfx-shop-sign::before { content:\"🍪\"; margin-right:.25em; }\n.gfx-shop-window { position:absolute; left:3%; top:36px; width:22%; height:44%; box-sizing:border-box; border:4px solid #fff; outline:2.5px solid var(--gfx-line, #6B4528); border-radius:10px 10px 4px 4px; overflow:hidden;\n  background:linear-gradient(90deg,transparent calc(50% - 2px),#fff calc(50% - 2px) calc(50% + 2px),transparent 0), linear-gradient(transparent calc(50% - 2px),#fff calc(50% - 2px) calc(50% + 2px),transparent 0), #BFE6FF; }\n.gfx-shop-window::before { content:\"\"; position:absolute; left:14%; top:22%; width:16%; aspect-ratio:1; border-radius:50%; background:#fff; box-shadow:.7em .15em 0 .1em #fff, 1.3em .2em 0 -.05em #fff; }\n.gfx-shop-window::after { content:\"\"; position:absolute; inset:0 auto auto 0; width:100%; height:22%; background:repeating-linear-gradient(90deg,var(--gfx-accent, #F0763A) 0 8px,#FFD3C0 8px 16px); border-bottom:2px solid var(--gfx-line, #6B4528); border-radius:0 0 40% 40% / 0 0 100% 100%; }\n.gfx-load-games[data-theme=\"night\"] .gfx-shop-window { background-color:#171A2E; }\n.gfx-load-games[data-theme=\"night\"] .gfx-shop-window::before { background:#FFD166; box-shadow:0 0 6px #FFD166, 1.4em 1.2em 0 -.25em #FFF6C2; }\n.gfx-shop-menu { position:absolute; right:3%; top:36px; width:24%; box-sizing:border-box; display:grid !important; gap:1px; padding:4px 6px; font-size:max(8px,2.3cqw); color:#F5F1E6;\n  background:#3E4A3D; border:4px solid #A8743F; outline:2.5px solid var(--gfx-line, #6B4528); border-radius:8px; }\n.gfx-shop-menu b { font-weight:normal; text-align:center; color:#FFD84D; letter-spacing:.15em; }\n.gfx-shop-menu span { display:flex; align-items:center; gap:.3em; white-space:nowrap; }\n.gfx-shop-menu svg { width:1.7em; flex:none; }\n.gfx-shop-menu i { font-style:normal; }\n/* Guests: up to three behind the counter, an order bubble with a patience bar above each; the bubbles sit over the sign. */\n.gfx-shop-guests { position:absolute; z-index:3; left:26%; right:28%; top:40px; bottom:19%; display:flex !important; justify-content:center; align-items:flex-end; gap:2%; }\n.gfx-shop-guest { position:relative; width:32%; display:flex; flex-direction:column; align-items:center; gap:3px; animation:gfx-guest-in .45s cubic-bezier(.3,1.5,.5,1) both; }\n@keyframes gfx-guest-in { from { translate:0 40%; opacity:0; } }\n.gfx-shop-guest .order { position:relative; display:flex; align-items:center; gap:.2em; padding:.15em .4em .35em; border-radius:10px; background:#fff; border:2px solid var(--gfx-line, #6B4528);\n  font-size:max(8px,2.1cqw); white-space:nowrap; box-shadow:0 2px 0 var(--gfx-line, #6B4528); }\n.gfx-shop-guest .order::after { content:\"\"; position:absolute; left:50%; bottom:-6px; width:8px; height:8px; background:#fff; border-right:2px solid var(--gfx-line, #6B4528); border-bottom:2px solid var(--gfx-line, #6B4528); translate:-50% 0; rotate:45deg; }\n.gfx-shop-guest .order svg { width:2em; }\n.gfx-shop-guest .order i { font-style:normal; }\n.gfx-shop-guest .wait { position:absolute; left:6px; right:6px; bottom:2px; height:3px; border-radius:999px; background:#0001; overflow:hidden; }\n.gfx-shop-guest .wait::after { content:\"\"; position:absolute; inset:0 auto 0 0; width:calc(var(--w, 1) * 100%); background:#4CC27A; border-radius:999px; }\n.gfx-shop-guest[data-mood=\"ok\"] .wait::after { background:#FFC933; }\n.gfx-shop-guest[data-mood=\"angry\"] .wait::after { background:#E0483C; }\n.gfx-shop-guest .fig { position:relative; width:100%; aspect-ratio:60 / 72; display:block; }\n.gfx-shop-guest .fig > * { position:absolute; inset:0; width:100%; height:100%; }\n.gfx-shop-guest .fig img { object-fit:contain; object-position:50% 0; filter:drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 1px #fff); }\n/* An SD sprite is a whole figure: show its upper body, as large as the drawn guests; the counter hides the cut. */\n.gfx-shop-guest .fig[data-sd] { overflow:hidden; }\n.gfx-shop-guest .fig[data-sd] > img { inset:4% auto auto 50%; width:auto; height:165%; max-width:none; translate:-50% 0; object-fit:fill; }\n.gfx-shop-guest .fig[data-sd]::after { z-index:1; }\n.gfx-shop-guest[data-mood=\"happy\"] .fig { animation:gfx-guest-bob 1.6s ease-in-out infinite; }\n@keyframes gfx-guest-bob { 50% { translate:0 -3%; } }\n.gfx-shop-guest[data-mood=\"angry\"] .fig { animation:gfx-guest-fume .5s ease-in-out infinite; }\n@keyframes gfx-guest-fume { 25% { translate:-2% 0; } 75% { translate:2% 0; } }\n.gfx-shop-guest[data-mood=\"angry\"] .fig::after { content:\"💢\"; position:absolute; right:-4%; top:2%; font-size:max(10px,3cqw); }\n.gfx-shop-guest[data-leave] { animation:gfx-guest-out .7s ease-in both; }\n.gfx-shop-guest[data-leave=\"happy\"] { animation-name:gfx-guest-yay; }\n@keyframes gfx-guest-out { 30% { translate:0 -6%; } to { translate:0 60%; opacity:0; } }\n@keyframes gfx-guest-yay { 25% { translate:0 -14%; } 50% { translate:0 0; } to { translate:0 -10%; opacity:0; } }\n.gfx-shop-guest[data-leave=\"happy\"] .fig::after { content:\"♥\"; position:absolute; right:0; top:0; color:#F2557F; font-size:max(12px,3.4cqw); }\n.gfx-shop-fig-svg, .gfx-shop-guest .fig svg { overflow:visible; }\n.gfx-shop-guest .g-body { fill:var(--shirt, #F7A8C4); stroke:var(--gfx-line, #6B4528); stroke-width:2.5; }\n.gfx-shop-guest .g-collar { fill:none; stroke:var(--gfx-line, #6B4528); stroke-width:2.2; }\n.gfx-shop-guest .g-back, .gfx-shop-guest .g-hair { fill:var(--hair, #6B4528); stroke:var(--gfx-line, #6B4528); stroke-width:2.5; stroke-linejoin:round; }\n.gfx-shop-guest .g-head { fill:#FFE3C8; stroke:var(--gfx-line, #6B4528); stroke-width:2.5; }\n.gfx-shop-guest .g-eyes { fill:#3A2618; }\n.gfx-shop-guest .g-cheek { fill:#FF9FA8; opacity:.65; }\n.gfx-shop-guest .g-mouth { fill:none; stroke:#3A2618; stroke-width:2; stroke-linecap:round; display:none; }\n.gfx-shop-guest .g-brow { fill:none; stroke:#3A2618; stroke-width:2; stroke-linecap:round; display:none; }\n.gfx-shop-guest:not([data-mood]) .m-happy, .gfx-shop-guest[data-mood=\"happy\"] .m-happy, .gfx-shop-guest[data-mood=\"ok\"] .m-flat, .gfx-shop-guest[data-mood=\"angry\"] .m-angry, .gfx-shop-guest[data-mood=\"angry\"] .g-brow { display:inline; }\n/* The counter: wood planks, the guest's word and the till. */\n.gfx-shop-counter { position:absolute; inset:auto 0 0; height:24%; display:flex !important; align-items:center; gap:8px; padding:0 3%; box-sizing:border-box; z-index:4;\n  background:repeating-linear-gradient(90deg,#B07A47 0 46px,#9E6C3D 46px 48px); border-top:3px solid var(--gfx-line, #6B4528); box-shadow:inset 0 6px 0 #C99260; }\n.gfx-shop-say { position:relative; flex:1; min-width:0; padding:.25em .8em; border-radius:12px; background:#fff; border:2.5px solid var(--gfx-line, #6B4528); box-shadow:0 2px 0 var(--gfx-line, #6B4528);\n  font-size:max(10px,2.7cqw); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }\n.gfx-shop-say[data-mood=\"good\"] { background:#DDF6E6; } .gfx-shop-say[data-mood=\"bad\"] { background:#FFE1DC; }\n.gfx-shop-say[data-pop] { animation:gfx-game-pop .3s cubic-bezier(.3,1.6,.5,1); }\n.gfx-shop-till { flex:none; padding:.2em .6em; border-radius:8px; background:#3E2616; color:#9CF5B8; border:2.5px solid var(--gfx-line, #6B4528); box-shadow:inset 0 0 0 2px #5A3A24, 0 2px 0 var(--gfx-line, #6B4528);\n  font-size:max(10px,2.6cqw); font-variant-numeric:tabular-nums; letter-spacing:.04em; }\n.gfx-shop-till::before { content:\"🪙 \"; }\n/* The shelf: a wooden plank with the seven tools. */\n.gfx-shop-shelf { display:grid !important; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; padding:6px 6px 9px; background:#8A5A33; border-top:3px solid var(--gfx-line, #6B4528); border-bottom:3px solid var(--gfx-line, #6B4528);\n  box-shadow:inset 0 -5px 0 #74482A; }\n.gfx-game-board[data-kind=\"shop\"] .gfx-shop-tool { position:relative; display:flex; flex-direction:column; align-items:center; gap:0; padding:3px 0 2px !important; border-radius:12px !important; border-width:2px;\n  background:#FFF7E8; box-shadow:0 3px 0 var(--gfx-line, #6B4528); font-size:max(9px,2.3cqw); min-width:0; transition:translate .1s ease, background .15s ease; }\n.gfx-shop-tool .icon { display:block; width:min(2.6em,80%); }\n.gfx-shop-tool .icon svg { display:block; width:100%; }\n.gfx-shop-tool .label { white-space:nowrap; }\n.gfx-shop-tool kbd { position:absolute; left:2px; top:1px; font:inherit; font-size:.75em; line-height:1; color:#B59C80; }\n.gfx-game-board[data-kind=\"shop\"] .gfx-shop-tool[aria-pressed=\"true\"] { background:var(--gfx-pick, #FFE17A); translate:0 -3px; box-shadow:0 5px 0 var(--gfx-line, #6B4528), 0 0 0 2px #fff inset; }\n.gfx-game-board[data-kind=\"shop\"] .gfx-shop-tool[aria-pressed=\"true\"] .label { color:var(--gfx-accent, #F0763A); }\n/* The kitchen: a tiled wall and four ovens. */\n.gfx-game-board[data-kind=\"shop\"] > .gfx-shop-ovens { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:3%; padding:10px 3% 10px;\n  background:conic-gradient(#FFFDF8 25%,#EFE3D2 0 50%,#FFFDF8 0 75%,#EFE3D2 0) 0 0 / 22px 22px; }\n.gfx-load-games[data-theme=\"night\"] .gfx-game-board[data-kind=\"shop\"] > .gfx-shop-ovens { background:conic-gradient(#2A2E4D 25%,#232742 0 50%,#2A2E4D 0 75%,#232742 0) 0 0 / 22px 22px; }\n.gfx-game-board[data-kind=\"shop\"] .gfx-shop-oven { position:relative; display:block; padding:0 !important; background:none; border:0; box-shadow:none; border-radius:0 !important; color:inherit; min-width:0; }\n.gfx-game-board[data-kind=\"shop\"] .gfx-shop-oven:active:not(:disabled) { translate:0 2px; box-shadow:none; }\n.gfx-game-board[data-kind=\"shop\"] .gfx-shop-oven:hover:not(:disabled) svg { filter:brightness(1.06); }\n.gfx-shop-oven svg { display:block; width:100%; overflow:visible; }\n.gfx-shop-oven .tag { display:block; margin:3px auto 0; width:fit-content; max-width:100%; box-sizing:border-box; padding:.05em .55em; border-radius:999px; background:#fff; border:2px solid var(--gfx-line, #6B4528);\n  font-size:max(9px,2.2cqw); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }\n.gfx-shop-oven[data-stage=\"hot\"] .tag { background:#C9F0D6; color:#1C7A43; }\n.gfx-shop-oven[data-stage=\"ready\"] .tag { background:#FFD84D; animation:gfx-game-blink .6s ease-in-out infinite; }\n.gfx-shop-oven[data-stage=\"over\"] .tag { background:#FFB38A; color:#7A2A0C; }\n.gfx-shop-oven[data-stage=\"burnt\"] .tag { background:#E0483C; color:#fff; }\n.gfx-shop-oven[data-stage=\"ready\"] svg { filter:drop-shadow(0 0 5px #FFD84D) drop-shadow(0 0 2px #FFD84D); }\n.gfx-shop-oven[data-stage=\"burnt\"] svg { animation:gfx-game-shake .5s ease infinite; }\n.gfx-shop-oven[data-stage=\"gone\"] { opacity:.3; filter:grayscale(1); }\n.gfx-shop-oven[data-nope] svg { animation:gfx-game-shake .25s ease; }\n/* Oven parts. */\n.gfx-shop-oven svg * { stroke-linecap:round; stroke-linejoin:round; }\n.gfx-shop-oven .ov-foot { fill:var(--gfx-line, #6B4528); }\n.gfx-shop-oven .ov-body { fill:#FBEBD3; stroke:var(--gfx-line, #6B4528); stroke-width:3; }\n.gfx-shop-oven .ov-top { fill:var(--gfx-accent, #F0763A); stroke:var(--gfx-line, #6B4528); stroke-width:3; }\n.gfx-shop-oven .ov-knob circle { fill:#fff; stroke:var(--gfx-line, #6B4528); stroke-width:2.5; }\n.gfx-shop-oven .ov-knob path { stroke:var(--gfx-line, #6B4528); stroke-width:2.5; }\n.gfx-shop-oven .ov-knob { transform-origin:18px 20px; transition:rotate .3s ease; }\n.gfx-shop-oven[data-lit=\"true\"]:not([data-stage=\"cold\"]) .ov-knob { rotate:135deg; }\n.gfx-shop-oven .dial-face { fill:#fff; stroke:var(--gfx-line, #6B4528); stroke-width:2.5; }\n.gfx-shop-oven .ov-dial path[class^=\"z-\"] { fill:none; stroke-width:3.2; stroke-linecap:butt; }\n.gfx-shop-oven .z-raw { stroke:#E5D6BF; } .gfx-shop-oven .z-ready { stroke:#FFC933; } .gfx-shop-oven .z-over { stroke:#F0763A; }\n.gfx-shop-oven .needle { stroke:#E0483C; stroke-width:2; transform-origin:50px 22px; rotate:calc(-90deg + var(--p, 0) * 180deg); transition:rotate .1s linear; }\n.gfx-shop-oven .hub { fill:var(--gfx-line, #6B4528); }\n.gfx-shop-oven .ov-lamp { fill:#D7CBBB; stroke:var(--gfx-line, #6B4528); stroke-width:2.2; }\n.gfx-shop-oven[data-stage=\"heat\"] .ov-lamp { fill:#FF8A3D; animation:gfx-game-blink .5s ease-in-out infinite; }\n.gfx-shop-oven:is([data-stage=\"hot\"],[data-stage=\"raw\"],[data-stage=\"ready\"]) .ov-lamp { fill:#4CD07D; }\n.gfx-shop-oven:is([data-stage=\"over\"],[data-stage=\"burnt\"]) .ov-lamp { fill:#E0483C; animation:gfx-game-blink .3s ease-in-out infinite; }\n.gfx-shop-oven .ov-door { fill:#6B4528; stroke:#3E2616; stroke-width:3; }\n.gfx-shop-oven .ov-glass { fill:#2B1D14; stroke:#3E2616; stroke-width:2; transition:fill .4s ease; }\n.gfx-shop-oven:not([data-stage=\"cold\"]) .ov-glass { fill:#6A2E14; animation:gfx-oven-warm 1.2s ease-in-out infinite alternate; }\n.gfx-shop-oven[data-stage=\"ready\"] .ov-glass { fill:#9A4A1C; }\n.gfx-shop-oven[data-stage=\"burnt\"] .ov-glass { fill:#1A1210; animation:none; }\n@keyframes gfx-oven-warm { to { fill:#7E3818; } }\n.gfx-shop-oven .ov-coil { fill:none; stroke:#7A6A5E; stroke-width:2; }\n.gfx-shop-oven:not([data-stage=\"cold\"]):not([data-stage=\"burnt\"]) .ov-coil { stroke:#FF7A2E; }\n.gfx-shop-oven .ov-fire { display:none; fill:#FFB347; }\n.gfx-shop-oven:not([data-stage=\"cold\"]):not([data-stage=\"burnt\"]) .ov-fire { display:inline; }\n.gfx-shop-oven .ov-fire path { transform-box:fill-box; transform-origin:50% 100%; animation:gfx-oven-flame .35s ease-in-out infinite alternate; }\n.gfx-shop-oven .ov-fire path:nth-child(2n) { animation-delay:-.17s; fill:#FFD84D; }\n@keyframes gfx-oven-flame { to { scale:1 .7; } }\n.gfx-shop-oven .ov-tray { fill:#C9D0D8; stroke:#5C646E; stroke-width:1.6; }\n.gfx-shop-oven .ov-butter rect { fill:#FFE07A; stroke:#7A5A10; stroke-width:1.6; }\n.gfx-shop-oven .ov-butter path { stroke:#fff; stroke-width:1.6; opacity:.7; }\n.gfx-shop-oven .ov-butter, .gfx-shop-oven .ov-melt, .gfx-shop-oven .ov-cookie { display:none; }\n.gfx-shop-oven[data-butter=\"true\"][data-dough=\"false\"][data-stage=\"cold\"] .ov-butter { display:inline; }\n.gfx-shop-oven[data-butter=\"true\"]:not([data-stage=\"cold\"]) .ov-melt { display:inline; fill:#FFD84D; opacity:.9; }\n.gfx-shop-oven[data-dough=\"true\"] .ov-cookie { display:inline; }\n.gfx-shop-oven .ck-ball { fill:#F6DFAE; stroke:#C9A26A; stroke-width:2; transform-box:fill-box; transform-origin:50% 100%; scale:calc(1 + var(--p, 0) * .6) calc(1 - var(--p, 0) * .5); }\n.gfx-shop-oven .ck-disc, .gfx-shop-oven .ck-crack { display:none; }\n.gfx-shop-oven:is([data-stage=\"ready\"],[data-stage=\"over\"],[data-stage=\"burnt\"]) .ck-ball { display:none; }\n.gfx-shop-oven:is([data-stage=\"ready\"],[data-stage=\"over\"],[data-stage=\"burnt\"]) :is(.ck-disc,.ck-crack) { display:inline; }\n.gfx-shop-oven .ck-disc { fill:#E2A04F; stroke:#8A4F1C; stroke-width:2; transform-box:fill-box; transform-origin:50% 100%; }\n.gfx-shop-oven .ck-crack { fill:none; stroke:#B5722F; stroke-width:1.4; }\n.gfx-shop-oven[data-stage=\"over\"] .ck-disc { fill:#A8682E; stroke:#5A3010; }\n.gfx-shop-oven[data-stage=\"burnt\"] .ck-disc { fill:#2E1C12; stroke:#140A06; } .gfx-shop-oven[data-stage=\"burnt\"] .ck-crack { stroke:#4A2E1C; }\n.gfx-shop-oven[data-flat=\"true\"] :is(.ck-disc,.ck-ball) { scale:1.08 .55; }\n.gfx-shop-oven .ck-sugar, .gfx-shop-oven .ck-chip, .gfx-shop-oven .ck-cream { display:none; }\n.gfx-shop-oven[data-sugar=\"true\"]:not([data-stage=\"burnt\"]) .ck-sugar { display:inline; fill:#fff; }\n.gfx-shop-oven[data-chip=\"true\"] .ck-chip { display:inline; fill:#3E2616; }\n.gfx-shop-oven[data-cream=\"true\"] .ck-cream { display:inline; }\n.gfx-shop-oven .ck-cream path:first-child { fill:#fff; stroke:#C99F7E; stroke-width:1.6; }\n.gfx-shop-oven .ck-cream path + path { fill:none; stroke:#E8D3BE; stroke-width:1.2; }\n.gfx-shop-oven .ov-steam { display:none; fill:none; stroke:#fff; stroke-width:2.2; opacity:.85; }\n.gfx-shop-oven[data-stage=\"ready\"] .ov-steam { display:inline; }\n.gfx-shop-oven .ov-steam path { animation:gfx-oven-steam 1s ease-in-out infinite; }\n.gfx-shop-oven .ov-steam path:nth-child(2) { animation-delay:-.33s; } .gfx-shop-oven .ov-steam path:nth-child(3) { animation-delay:-.66s; }\n@keyframes gfx-oven-steam { from { translate:0 4px; opacity:0; } 40% { opacity:1; } to { translate:0 -5px; opacity:0; } }\n.gfx-shop-oven .ov-smoke { display:none; fill:#9A938C; opacity:.8; }\n.gfx-shop-oven[data-warn=\"true\"] .ov-smoke, .gfx-shop-oven[data-stage=\"burnt\"] .ov-smoke { display:inline; }\n.gfx-shop-oven[data-stage=\"burnt\"] .ov-smoke { fill:#3A3330; }\n.gfx-shop-oven .ov-smoke circle { animation:gfx-oven-smoke 1.4s ease-in-out infinite; transform-box:fill-box; transform-origin:50% 50%; }\n.gfx-shop-oven .ov-smoke circle:nth-child(2) { animation-delay:-.5s; } .gfx-shop-oven .ov-smoke circle:nth-child(3) { animation-delay:-1s; }\n@keyframes gfx-oven-smoke { from { translate:0 6px; scale:.6; opacity:0; } 50% { opacity:1; } to { translate:0 -6px; scale:1.2; opacity:0; } }\n.gfx-shop-oven .ov-shine { fill:none; stroke:#fff; stroke-width:2.5; opacity:.25; }\n.gfx-shop-oven .ov-handle { fill:#C9D0D8; stroke:var(--gfx-line, #6B4528); stroke-width:2; }\n/* +price over the oven, a burst of stars for a perfect cookie. */\n.gfx-game-board[data-kind=\"shop\"] > .gfx-shop-coin { position:absolute; bottom:22%; translate:-50% 0; z-index:3; padding:.1em .6em; border-radius:999px !important; background:#FFD84D; color:#5A3A10; border:2.5px solid var(--gfx-line, #6B4528);\n  white-space:nowrap; font-size:max(11px,2.8cqw); pointer-events:none; animation:gfx-shop-coin 1.1s ease-out both; }\n.gfx-game-board[data-kind=\"shop\"] > .gfx-shop-coin[data-zero] { background:#FFE1DC; color:#A1281C; }\n@keyframes gfx-shop-coin { from { translate:-50% 20px; opacity:0; } 20% { translate:-50% 0; opacity:1; } 75% { opacity:1; } to { translate:-50% -40px; opacity:0; } }\n.gfx-game-board[data-kind=\"shop\"] > .gfx-shop-sparkle { position:absolute; bottom:30%; width:10%; aspect-ratio:1; translate:-50% 0; z-index:3; pointer-events:none; animation:gfx-shop-burst .9s ease-out both; }\n.gfx-game-board[data-kind=\"shop\"] > .gfx-shop-sparkle::before, .gfx-game-board[data-kind=\"shop\"] > .gfx-shop-sparkle::after { content:\"✦\"; position:absolute; inset:0; display:grid; place-items:center; color:#FFD84D; font-size:max(14px,4cqw);\n  text-shadow:-1.4em -.6em 0 #FFD84D, 1.3em -.8em 0 #fff, -1em .9em 0 #fff, 1.2em .7em 0 #FFD84D, 0 -1.5em 0 #F7A8C4; -webkit-text-stroke:1px var(--gfx-line, #6B4528); }\n@keyframes gfx-shop-burst { from { scale:.3; opacity:0; } 30% { opacity:1; } to { scale:1.4; opacity:0; } }\n/* 디저트 핀볼 and 비스킷 벽돌깨기: the table on a canvas, the flipper and launch buttons under it. */\n.gfx-game-board:is([data-kind=\"pinball\"],[data-kind=\"bricks\"]) { display:flex; flex-direction:column; gap:8px; padding:8px; background:var(--gfx-line, #6B4528); }\n.gfx-game-board:is([data-kind=\"pinball\"],[data-kind=\"bricks\"]) > * { aspect-ratio:auto; place-items:normal; font-size:inherit; line-height:1.3; }\n.gfx-game-board:is([data-kind=\"pinball\"],[data-kind=\"bricks\"]) > .gfx-pin-table { display:block; width:100%; aspect-ratio:320 / 520; border-radius:12px !important; touch-action:none; cursor:pointer; }\n.gfx-game-board:is([data-kind=\"pinball\"],[data-kind=\"bricks\"]) > .gfx-pin-pad { display:flex; gap:6px; border-radius:0 !important; }\n.gfx-pin-pad button { flex:1; padding:.45em 0 !important; border-radius:14px !important; font-size:.88em; white-space:nowrap; touch-action:none; }\n.gfx-pin-pad .gfx-pin-launch { background:var(--gfx-pick, #FFE17A); }\n.gfx-pin-pad button[data-held] { translate:0 2px; box-shadow:0 1px 0 var(--gfx-line, #6B4528); background:var(--gfx-accent, #F0763A); color:#fff; }\n/* The shop's paper, wood and tiles stay light in every theme, so its writing stays dark. */\n.gfx-game-board[data-kind=\"shop\"], .gfx-game-board[data-kind=\"shop\"] .gfx-shop-tool { color:#5A3A24; }\n.gfx-load-games[data-theme=\"night\"] .gfx-game-board[data-kind=\"shop\"] .gfx-shop-tool[aria-pressed=\"true\"] { background:#FFE17A; }\n.gfx-load-games[data-theme=\"night\"] .gfx-game-board[data-kind=\"shop\"] .gfx-shop-tool[aria-pressed=\"true\"] .label { color:#B5521C; }\n/* 젤리 블록: jelly cubes on a dark tray; a piece being placed shows where it lands and which lines would melt. */\n.gfx-load-games { --j1:#F7A8C4; --j2:#FFB070; --j3:#FFD84D; --j4:#7FD8B0; --j5:#8CC8F5; --j6:#B9A3F5; --j7:#F2727F; }\n.gfx-game-board[data-kind=\"block\"] { gap:3px; padding:7px; background:var(--gfx-line, #6B4528); }\n.gfx-game-board[data-kind=\"block\"] > div { border-radius:22% !important; background:rgba(255,255,255,.09); box-shadow:inset 0 2px 0 rgba(0,0,0,.18); cursor:pointer; }\n.gfx-game-board[data-kind=\"block\"] > div[data-c], .gfx-game-board[data-kind=\"block\"] > div[data-prev], .gfx-block-piece > i[data-c] {\n  background:var(--c); box-shadow:inset 0 -.22em 0 rgba(0,0,0,.2), inset 0 .2em 0 rgba(255,255,255,.5), 0 0 0 1.5px rgba(0,0,0,.25); }\n.gfx-game-board[data-kind=\"block\"] > div[data-c]::before, .gfx-game-board[data-kind=\"block\"] > div[data-prev]::before, .gfx-block-piece > i[data-c]::before {\n  content:\"\"; position:absolute; left:18%; top:16%; width:26%; height:18%; border-radius:999px; background:#fff; opacity:.75; }\n.gfx-game-board[data-kind=\"block\"] > div[data-prev]:not([data-c]) { opacity:.55; }\n:is(.gfx-game-board[data-kind=\"block\"] > div, .gfx-block-piece > i)[data-c=\"1\"], .gfx-game-board[data-kind=\"block\"] > div[data-prev=\"1\"] { --c:var(--j1); }\n:is(.gfx-game-board[data-kind=\"block\"] > div, .gfx-block-piece > i)[data-c=\"2\"], .gfx-game-board[data-kind=\"block\"] > div[data-prev=\"2\"] { --c:var(--j2); }\n:is(.gfx-game-board[data-kind=\"block\"] > div, .gfx-block-piece > i)[data-c=\"3\"], .gfx-game-board[data-kind=\"block\"] > div[data-prev=\"3\"] { --c:var(--j3); }\n:is(.gfx-game-board[data-kind=\"block\"] > div, .gfx-block-piece > i)[data-c=\"4\"], .gfx-game-board[data-kind=\"block\"] > div[data-prev=\"4\"] { --c:var(--j4); }\n:is(.gfx-game-board[data-kind=\"block\"] > div, .gfx-block-piece > i)[data-c=\"5\"], .gfx-game-board[data-kind=\"block\"] > div[data-prev=\"5\"] { --c:var(--j5); }\n:is(.gfx-game-board[data-kind=\"block\"] > div, .gfx-block-piece > i)[data-c=\"6\"], .gfx-game-board[data-kind=\"block\"] > div[data-prev=\"6\"] { --c:var(--j6); }\n:is(.gfx-game-board[data-kind=\"block\"] > div, .gfx-block-piece > i)[data-c=\"7\"], .gfx-game-board[data-kind=\"block\"] > div[data-prev=\"7\"] { --c:var(--j7); }\n/* Lines that the piece would fill glow; cells just placed squash in; melted cells burst. */\n.gfx-game-board[data-kind=\"block\"] > div[data-line] { outline:2.5px solid #fff; outline-offset:-1px; filter:brightness(1.15); z-index:1; animation:gfx-game-blink .5s ease-in-out infinite; }\n.gfx-game-board[data-kind=\"block\"] > div[data-drop] { animation:gfx-block-drop .26s cubic-bezier(.3,1.6,.5,1); }\n@keyframes gfx-block-drop { from { scale:1.25; } 40% { scale:.88; } }\n.gfx-game-board[data-kind=\"block\"] > div[data-pop]::after { content:\"\"; position:absolute; inset:0; border-radius:22%; background:var(--p); animation:gfx-block-melt .5s ease-out forwards; z-index:2; }\n.gfx-game-board[data-kind=\"block\"] > div[data-pop=\"1\"] { --p:var(--j1); } .gfx-game-board[data-kind=\"block\"] > div[data-pop=\"2\"] { --p:var(--j2); } .gfx-game-board[data-kind=\"block\"] > div[data-pop=\"3\"] { --p:var(--j3); }\n.gfx-game-board[data-kind=\"block\"] > div[data-pop=\"4\"] { --p:var(--j4); } .gfx-game-board[data-kind=\"block\"] > div[data-pop=\"5\"] { --p:var(--j5); } .gfx-game-board[data-kind=\"block\"] > div[data-pop=\"6\"] { --p:var(--j6); }\n.gfx-game-board[data-kind=\"block\"] > div[data-pop=\"7\"] { --p:var(--j7); }\n@keyframes gfx-block-melt { 30% { scale:1.2; filter:brightness(1.4); } to { scale:.2; opacity:0; rotate:20deg; } }\n.gfx-game-board[data-kind=\"block\"] > div[data-nope] { animation:gfx-game-shake .3s ease; }\n/* The tray and its three pieces. */\n.gfx-block-tray { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; width:min(100%, max(170px, var(--room) * var(--fit, 1))); margin:10px auto 0; touch-action:none; user-select:none; -webkit-user-select:none; }\n.gfx-load-games .gfx-block-slot { aspect-ratio:1.15; display:grid; place-items:center; padding:6px !important; border-radius:16px !important; background:color-mix(in srgb,var(--gfx-line, #6B4528) 12%,var(--gfx-ink, #FFF4D9)); touch-action:none; container-type:inline-size; cursor:grab; }\n.gfx-load-games .gfx-block-slot:disabled { cursor:default; }\n.gfx-load-games .gfx-block-slot[aria-pressed=\"true\"] { background:var(--gfx-pick, #FFE17A); outline:3px solid var(--gfx-accent, #F0763A); }\n.gfx-block-slot[data-dragging] > .gfx-block-piece { opacity:.25; }\n.gfx-block-slot[data-dead=\"true\"] > .gfx-block-piece { filter:grayscale(.85); opacity:.5; }\n.gfx-block-piece { --m:min(17cqw, 24px); --gap:2px; display:grid; grid-template-columns:repeat(var(--w), var(--m)); grid-auto-rows:var(--m); gap:var(--gap); pointer-events:none; font-size:var(--m); }\n.gfx-block-piece > i { position:relative; border-radius:22%; }\n.gfx-block-ghost { position:fixed; left:0; top:0; z-index:3; pointer-events:none; filter:drop-shadow(0 6px 4px rgba(0,0,0,.25)); }\n.gfx-block-ghost[hidden] { display:none; }\n.gfx-block-ghost[data-bad=\"true\"] { opacity:.55; filter:grayscale(.6) drop-shadow(0 6px 4px rgba(0,0,0,.25)); }\n.gfx-block-pop { position:absolute; z-index:3; translate:-50% -50%; padding:.1em .7em; border-radius:999px; background:#FFD84D; color:#5A3A10; border:2.5px solid var(--gfx-line, #6B4528); white-space:nowrap; pointer-events:none; animation:gfx-shop-coin 1.1s ease-out both; }\n.gfx-block-pop[data-big] { font-size:1.25em; background:var(--gfx-accent, #F0763A); color:#fff; }\n";
   const CSS_MORE = `
+/* Extra games: a wide runner, two portrait arcades and numbered liquid layers. */
+.gfx-game-board:is([data-kind="dino"], [data-kind="water"], [data-kind="candy"], [data-kind="knife"], [data-kind="count"]) {
+  display:flex; flex-direction:column; gap:8px; padding:8px; background:var(--gfx-line, #6B4528);
+}
+.gfx-game-board:is([data-kind="dino"], [data-kind="water"], [data-kind="candy"], [data-kind="knife"], [data-kind="count"]) > * {
+  aspect-ratio:auto; place-items:normal; font-size:inherit; line-height:1.3;
+}
+.gfx-game-board .gfx-arcade-canvas { display:block; width:100%; height:auto; border-radius:12px; touch-action:none; cursor:pointer; }
+.gfx-game-board .gfx-arcade-pad { display:flex; gap:6px; border-radius:0; }
+.gfx-arcade-pad button { flex:1; min-height:40px; padding:.4em .6em !important; touch-action:none; font-size:.85em; }
+.gfx-arcade-pad button[data-held] { background:var(--gfx-pick, #FFE17A); translate:0 2px; }
+.gfx-game-board:is([data-kind="dino"], [data-kind="water"], [data-kind="candy"], [data-kind="knife"], [data-kind="count"]):focus-visible { outline:3px solid var(--gfx-accent, #F0763A); outline-offset:3px; }
 /* 크게 보기: the column over the whole window (top layer), the page dimmed behind it. */
 :host([data-game-large]) { position:fixed; inset:12px; width:auto; height:auto; max-width:none; max-height:none; margin:0; padding:0; border:0; background:transparent;
   overflow:visible; color:inherit; z-index:2147483000; box-shadow:0 0 0 100vmax rgba(12,10,24,.55); border-radius:24px; }
