@@ -1,4 +1,4 @@
-/* Gacha Mini Games v1.9.1 — personal extension for Gacha Forge on Marinara Engine.
+/* Gacha Mini Games v1.9.2 — personal extension for Gacha Forge on Marinara Engine.
  * While a chapter or story is being generated, the generation screen gets a column of small games on its right:
  * 지뢰찾기, 사과 상자 (the fruit follows the 말랑 colour preset), 2048, 짝 맞추기, 쿠키 가게, 디저트 핀볼 and more. Closing the column or
  * finishing generation removes them; nothing here touches the run, rewards or the generation request.
@@ -2725,26 +2725,55 @@
           // Water Sort Puzzle: outlined tubes on the board's ground; the picked tube lifts, flies over the other, tips and pours.
           const COLORS = ['#F2606B', '#5AA9F0', '#4FC487', '#FFD447', '#A47CF0', '#FF9A3D', '#F58CC0', '#62D3DE', '#AEDB5E', '#A8774E'];
           const NAMES = ['빨강', '파랑', '초록', '노랑', '보라', '주황', '분홍', '하늘', '연두', '갈색'];
-          const TW = 34, LH = 26, TH = LH * 4 + 26, DUR = 820;
-          let sel = -1, msg = '', anim = null, clearedSaved = false;
+          // Tube size follows the count: wide, tall tubes in one row; two shorter rows past six.
+          let TW = 40, LH = 32, TH = LH * 4 + 26;
+          const DUR = 500;
+          let sel = -1, msg = '', anim = null, clearedSaved = false, press = null;
           const doneAt = {};
           const layout = () => {
             const n = game.bottles.length, rows = n > 6 ? 2 : 1, per = Math.ceil(n / rows);
+            TW = per <= 5 ? 46 : per === 6 ? 42 : 36; LH = rows === 1 ? 34 : 26; TH = LH * 4 + 26;
             return game.bottles.map((_, i) => {
               const r = Math.floor(i / per), c = i % per, inRow = r === rows - 1 ? n - per * (rows - 1) : per, gap = (W - inRow * TW) / (inRow + 1);
-              const bottom = rows === 1 ? 345 : r ? 425 : 250;
-              return { x: gap + c * (TW + gap), top: bottom - TH, bottom };
+              const bottom = rows === 1 ? 392 : r ? 430 : 252;
+              return { x: gap + c * (TW + gap), top: bottom - TH, bottom, row: r, gap };
             });
           };
+          // The tube under a point: anywhere in its column, from above its rim to the shelf, so a loose tap still lands.
+          const tubeAt = p => {
+            const L = layout(), rows = L.some(b => b.row) ? 2 : 1, row = rows === 1 ? 0 : p.y < (L[0].bottom + (L.find(b => b.row) || L[0]).top) / 2 ? 0 : 1;
+            let best = -1, dist = Infinity;
+            L.forEach((b, i) => {
+              if (b.row !== row || p.y < b.top - 46 || p.y > b.bottom + 24) return;
+              const d = Math.abs(p.x - (b.x + TW / 2));
+              if (d <= TW / 2 + b.gap / 2 && d < dist) { best = i; dist = d; }
+            });
+            return best;
+          };
           const nextLevel = level => { st.game = newWaterSortGame(Math.random, st.level, level); st.started = 0; st.stopped = 0; st.recorded = false; st.newBest = false; show(mode); };
-          const undo = button('↶ 되돌리기', () => { if (anim) return; if (game.undo()) { sel = -1; msg = ''; sfx.play('move'); paint(); } });
-          const add = button('+ 빈 병', () => { if (anim) return; if (game.addBottle()) { sel = -1; sfx.play('pop'); paint(); } });
+          // A pour is already made when its animation starts; settle() ends the animation early, so the next tap, undo
+          // or extra tube never has to wait for it.
+          const settle = () => {
+            if (!anim) return;
+            const to = anim.to;
+            if (!anim.poured) sfx.play('pop', 2);
+            anim = null;
+            if (game.done(to)) { doneAt[to] = performance.now(); sfx.play('match'); }
+            if (game.won && !clearedSaved) {
+              clearedSaved = true; sfx.play('win');
+              st.newBest = saveGameBest(mode + '-' + st.level, game.level, false);
+            }
+            paint();
+          };
+          const undo = button('↶ 되돌리기', () => { settle(); if (game.undo()) { sel = -1; msg = ''; sfx.play('move'); paint(); } });
+          const add = button('+ 빈 병', () => { settle(); if (game.addBottle()) { sel = -1; sfx.play('pop'); paint(); } });
           const again = button('⟲ 이 레벨 다시', () => nextLevel(game.level));
           tools.append(undo, add, again);
           const tap = p => {
-            if (anim) return;
+            // A tap during the winning pour only shows the clear card; the next tap moves on.
+            if (anim) { const won = game.won; settle(); if (won) return; }
             if (game.won) return nextLevel(game.level + 1);
-            const L = layout(), i = L.findIndex(b => p.x >= b.x - 10 && p.x <= b.x + TW + 10 && p.y >= b.top - 34 && p.y <= b.bottom + 14);
+            const i = tubeAt(p);
             msg = '';
             if (i < 0) { sel = -1; return; }
             if (sel < 0) { if (game.bottles[i].length && !game.done(i)) { sel = i; sfx.play('tap'); } else sfx.play('nope'); return; }
@@ -2753,21 +2782,26 @@
             if (n) { begin(); anim = { from: sel, to: i, n, color, t0: performance.now(), poured: false }; sel = -1; }
             else { sfx.play('nope'); msg = '같은 색 위나 빈 병에만 부을 수 있어요'; sel = game.bottles[i].length && !game.done(i) ? i : -1; }
           };
-          on(canvas, 'pointerdown', e => { e.preventDefault(); tap(toWorld(e)); focus(); });
-          keyDown = k => { if ((k === ' ' || k === 'enter') && game.won && !anim) nextLevel(game.level + 1); };
+          // Tap a tube, then the one to pour into; or press a tube and let go over the other.
+          on(canvas, 'pointerdown', e => {
+            e.preventDefault(); focus();
+            const before = sel; tap(toWorld(e));
+            press = sel >= 0 && sel !== before ? { id: e.pointerId, from: sel } : null;
+            if (press) canvas.setPointerCapture?.(e.pointerId);
+          });
+          on(canvas, 'pointerup', e => {
+            if (!press || press.id !== e.pointerId) return;
+            const from = press.from; press = null;
+            const p = toWorld(e), i = tubeAt(p);
+            if (sel === from && i >= 0 && i !== from) { tap(p); paint(); }
+          });
+          on(canvas, 'pointercancel', () => { press = null; });
+          keyDown = k => { if ((k === ' ' || k === 'enter') && game.won) { settle(); nextLevel(game.level + 1); } };
           onStep = () => {
             if (!anim) return;
             const p = (performance.now() - anim.t0) / DUR;
             if (p > 0.25 && !anim.poured) { anim.poured = true; sfx.play('pop', 2); }
-            if (p >= 1) {
-              const to = anim.to; anim = null;
-              if (game.done(to)) { doneAt[to] = performance.now(); sfx.play('match'); }
-              if (game.won && !clearedSaved) {
-                clearedSaved = true; sfx.play('win');
-                st.newBest = saveGameBest(mode + '-' + st.level, game.level, false);
-              }
-              paint();
-            }
+            if (p >= 1) settle();
           };
           sign = () => [game.moves, game.undos, game.extra, game.won, !!anim, msg].join('/');
           const tubePath = (x, top, bottom, inset = 0) => {
