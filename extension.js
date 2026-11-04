@@ -1,4 +1,4 @@
-/* Gacha Mini Games v1.9.6 — personal extension for Gacha Forge on Marinara Engine.
+/* Gacha Mini Games v1.10.0 — personal extension for Gacha Forge on Marinara Engine.
  * While a chapter or story is being generated, the generation screen gets a column of small games on its right:
  * 지뢰찾기, 사과 상자 (the fruit follows the 말랑 colour preset), 2048, 짝 맞추기, 쿠키 가게, 디저트 핀볼 and more. Closing the column or
  * finishing generation removes them; nothing here touches the run, rewards or the generation request.
@@ -22,9 +22,9 @@
    * Five levels each: easiest (입문), easy, normal, hard, expert (달인). The board games also take a stage: clearing
    * one offers the next, a little harder (more mines, more cards, a bigger board…), at the same level. */
   function newMineGame(random = Math.random, difficulty = "easy", stage = 1) {
-    const [cols0, mines0] = ({ easiest: [7, 6], easy: [8, 10], normal: [10, 18], hard: [12, 30], expert: [14, 45] })[difficulty] || [8, 10];
-    // Each stage: one more column every second stage, and the mines up to a quarter of the board.
-    const cols = Math.min(16, cols0 + Math.floor((stage - 1) / 2)), mines = Math.min(Math.floor(cols * cols * 0.25), Math.round(mines0 * cols * cols / (cols0 * cols0) * (1 + 0.12 * (stage - 1))));
+    const [cols0, mines0] = ({ easiest: [10, 18], easy: [12, 30], normal: [14, 43], hard: [15, 48], expert: [16, 56] })[difficulty] || [12, 30];
+    // Each stage: a column more every 1⅓ stages, and the mines up to a quarter of the board.
+    const cols = Math.min(16, cols0 + Math.floor((stage - 1) * 0.75)), mines = Math.min(Math.floor(cols * cols * 0.25), Math.round(mines0 * cols * cols / (cols0 * cols0) * (1 + 0.18 * (stage - 1))));
     const cells = Array.from({ length: cols * cols }, () => ({ mine: false, open: false, flag: false, count: 0 }));
     const game = { cells, cols, rows: cols, mines, started: false, ended: false, won: false, boom: -1 };
     const neighbours = (i) => cells.map((_, j) => j).filter((j) => j !== i && Math.abs(j % cols - i % cols) <= 1 && Math.abs(Math.floor(j / cols) - Math.floor(i / cols)) <= 1);
@@ -54,7 +54,7 @@
     return game;
   }
   function newFruitGame(random = Math.random, difficulty = "normal") {
-    const [cols, rows, max, time] = ({ easiest: [7, 5, 5, 240], easy: [8, 6, 5, 180], normal: [10, 8, 9, 120], hard: [12, 10, 9, 90], expert: [12, 10, 9, 60] })[difficulty] || [10, 8, 9, 120];
+    const [cols, rows, max, time] = ({ easiest: [10, 8, 9, 120], easy: [12, 10, 9, 90], normal: [12, 10, 9, 60], hard: [13, 10, 9, 52], expert: [14, 10, 9, 45] })[difficulty] || [12, 10, 9, 60];
     const game = { cols, rows, time, cells: Array.from({ length: cols * rows }, () => 1 + Math.floor(random() * max)), score: 0, ended: false };
     game.cells[0] = max === 5 ? 5 : 1; game.cells[1] = 10 - game.cells[0]; // Every new board has at least one legal selection.
     game.select = (a, b, remove = false) => {
@@ -76,7 +76,7 @@
     return game;
   }
   function new2048Game(random = Math.random, difficulty = "normal") {
-    const [size, goal] = ({ easiest: [6, 2048], easy: [5, 2048], normal: [4, 2048], hard: [3, 256], expert: [3, 512] })[difficulty] || [4, 2048];
+    const [size, goal] = ({ easiest: [4, 2048], easy: [3, 256], normal: [3, 512], hard: [4, 4096], expert: [4, 8192] })[difficulty] || [3, 512];
     const cells = Array(size * size).fill(0);
     const game = { size, cols: size, goal, cells, score: 0, ended: false, won: false, fresh: -1, merged: [] };
     const spawn = () => {
@@ -109,17 +109,19 @@
   }
   const MEMORY_SYMBOLS = ["🍎", "🍋", "🍇", "🍓", "🍑", "🍒", "🥝", "🍍", "🍉", "🍊", "🫐", "🥥", "🍐", "🥭", "🍈", "🍌", "🍏", "🌰"];
   function newMemoryGame(random = Math.random, difficulty = "easy", faces = [], stage = 1) {
-    // Each stage two more pairs, up to 18. The cards fill rows of 4 to 8, the narrowest that is no taller than wide;
+    // Each stage three more pairs, up to 18. The cards fill rows of 4 to 8, the narrowest that is no taller than wide;
     // a count with no such layout takes one pair more.
     const layout = (p) => [4, 5, 6, 7, 8].find((c) => (p * 2) % c === 0 && p * 2 / c <= c);
-    let pairs = Math.min(18, (({ easiest: 4, easy: 6, normal: 8, hard: 12, expert: 15 })[difficulty] || 6) + 2 * (stage - 1));
+    let pairs = Math.min(18, (({ easiest: 8, easy: 12, normal: 15, hard: 18, expert: 18 })[difficulty] || 12) + 3 * (stage - 1));
+    // How long a mismatched pair stays face up: the harder the level, the shorter.
+    const peek = ({ easiest: 800, easy: 650, normal: 520, hard: 420, expert: 340 })[difficulty] || 650;
     while (!layout(pairs)) pairs++;
     const cols = layout(pairs);
     const shuffle = (list) => { const a = list.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
     // The world's own SD characters are the cards; fruit fills in when there are fewer of them than pairs.
     const pool = [...shuffle([...new Set(faces)]).slice(0, pairs), ...MEMORY_SYMBOLS].slice(0, pairs);
     const cells = shuffle([...pool, ...pool]).map((face) => ({ face, open: false, done: false }));
-    const game = { cols, rows: cells.length / cols, pairs, cells, moves: 0, ended: false, won: false };
+    const game = { cols, rows: cells.length / cols, pairs, peek, cells, moves: 0, ended: false, won: false };
     game.flip = (i) => {
       const c = cells[i];
       if (game.ended || c.open || c.done) return "ignored";
@@ -150,17 +152,17 @@
   function newShopGame(random = Math.random, difficulty = "normal", stage = 1) {
     // preheat, bake, golden, over, empty oven burns after, goal, a guest every, patience, hearts
     const [heat, bake, ready, over, empty, goal0, every0, patience0, hearts] = ({
-      easiest: [1500, 5500, 5500, 4500, 11000, 4000, 11000, 42000, 6],
-      easy: [1500, 5000, 4500, 3500, 9000, 6000, 9000, 34000, 5],
-      normal: [1500, 4000, 3500, 2500, 7000, 10000, 7000, 26000, 4],
-      hard: [1200, 3500, 2600, 2000, 5500, 15000, 5500, 20000, 3],
-      expert: [1000, 3000, 2000, 1600, 4500, 20000, 4500, 16000, 3],
-    })[difficulty] || [1500, 4000, 3500, 2500, 7000, 10000, 7000, 26000, 4];
-    // Each new day (stage) the goal is a quarter higher and the guests a little hastier.
-    const goal = Math.round(goal0 * (1 + 0.25 * (stage - 1)) / 500) * 500, hurry = Math.pow(0.93, stage - 1);
+      easiest: [1500, 4000, 3500, 2500, 7000, 10000, 7000, 26000, 4],
+      easy: [1200, 3500, 2600, 2000, 5500, 15000, 5500, 20000, 3],
+      normal: [1000, 3000, 2000, 1600, 4500, 20000, 4500, 16000, 3],
+      hard: [850, 2600, 1500, 1200, 3600, 25000, 3800, 13000, 3],
+      expert: [700, 2200, 1200, 1000, 3000, 30000, 3200, 10000, 2],
+    })[difficulty] || [1000, 3000, 2000, 1600, 4500, 20000, 4500, 16000, 3];
+    // Each new day (stage) the goal is 37% higher and the guests hastier.
+    const goal = Math.round(goal0 * (1 + 0.375 * (stage - 1)) / 500) * 500, hurry = Math.pow(0.9, stage - 1);
     // The busier the day gets (money towards the goal), the more often guests come and the sooner they leave: up
-    // to a third faster by the goal.
-    const rush = () => 1 - 0.33 * Math.min(1, game.money / goal);
+    // to twice as fast by the goal.
+    const rush = () => 1 - 0.5 * Math.min(1, game.money / goal);
     const every = () => every0 * hurry * rush(), patience = () => patience0 * hurry * (0.5 + 0.5 * rush());
     const fresh = () => ({ butter: false, lit: null, dough: null, flat: false, sugar: false, chip: "", cream: "" });
     const game = { heat, bake, ready, over, empty, goal, stage, patience: patience0 * hurry, hearts, ovens: [fresh(), fresh(), fresh(), fresh()], spares: 3, money: 0, tips: 0, served: 0, perfect: 0, left: 0,
@@ -255,9 +257,9 @@
   // with each lost ball). A flipper press shifts the lit lanes. A ball lost within the ball-save time comes back, once.
   // step(ms) runs the physics in fixed 1/400 s steps, so it plays the same at any frame rate.
   function newPinballGame(random = Math.random, difficulty = "normal") {
-    const [gravity0, balls, len, save] = ({ easiest: [480, 7, 54, 15000], easy: [560, 5, 50, 10000], normal: [680, 3, 46, 5000], hard: [800, 3, 42, 0], expert: [900, 3, 39, 0] })[difficulty] || [680, 3, 46, 5000];
-    // The table grows steeper with the score: up to 35% more gravity at 60,000 points, so the ball comes back faster.
-    const gravity = () => gravity0 * (1 + 0.35 * Math.min(1, game.score / 60000));
+    const [gravity0, balls, len, save] = ({ easiest: [680, 3, 46, 5000], easy: [800, 3, 42, 0], normal: [900, 3, 39, 0], hard: [1000, 3, 36, 0], expert: [1100, 3, 33, 0] })[difficulty] || [900, 3, 39, 0];
+    // The table grows steeper with the score: up to 52% more gravity at 60,000 points, so the ball comes back faster.
+    const gravity = () => gravity0 * (1 + 0.52 * Math.min(1, game.score / 60000));
     const W = 320, H = 520, R = 7, LANE = 286, cx = 149;
     // The table's rim: the left wall, an elliptic roof, the outer right wall.
     const rim = [[12, 470], [12, 90]];
@@ -425,7 +427,7 @@
   // a while, or a heart. Clear the tray for the next stage, a little faster; lose the ball with no hearts left and it is
   // over. step(ms) runs in fixed 1/400 s steps, so it plays the same at any frame rate.
   function newBrickGame(random = Math.random, difficulty = "normal") {
-    const [width, speed, lives, choco] = ({ easiest: [86, 220, 7, 0], easy: [72, 250, 5, 0], normal: [58, 290, 3, 1], hard: [48, 330, 3, 2], expert: [42, 365, 2, 3] })[difficulty] || [58, 290, 3, 1];
+    const [width, speed, lives, choco] = ({ easiest: [58, 290, 3, 1], easy: [48, 330, 3, 2], normal: [42, 365, 2, 3], hard: [37, 400, 2, 4], expert: [33, 435, 2, 5] })[difficulty] || [42, 365, 2, 3];
     const W = 320, H = 420, R = 6, PY = 392, COLS = 8, BW = 34, BH = 15, GAP = 3, LEFT = (W - COLS * BW - (COLS - 1) * GAP) / 2, TOP = 46;
     const game = { W, H, R, PY, BW, BH, stage: 1, speed, lives, score: 0, bricks: [], items: [], popups: [], note: null,
       paddle: { x: W / 2, w: width, target: null, dir: 0, long: 0 }, ball: null, ended: false, won: false, broken: 0 };
@@ -481,7 +483,7 @@
       }
       game.bricks = game.bricks.filter((k) => k.hp > 0);
       if (!game.bricks.length) {
-        add(100 * game.stage, W / 2, 200); game.stage++; game.speed *= 1.08; game.items = [];
+        add(100 * game.stage, W / 2, 200); game.stage++; game.speed *= 1.12; game.items = [];
         game.note = { text: "스테이지 " + game.stage + "!", t: 0 }; lay(); serve(); return;
       }
       if (b.y > H + R) {
@@ -538,14 +540,14 @@
     [[0, 1, 2], [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2]]], [[0, 1, 2], [[0, 0], [0, 1], [0, 2], [1, 0], [2, 0]]], [[0, 1, 2], [[0, 0], [0, 1], [0, 2], [1, 2], [2, 2]]], [[0, 1, 2], [[0, 2], [1, 2], [2, 2], [2, 1], [2, 0]]],
   ];
   function newBlockGame(random = Math.random, difficulty = "normal") {
-    const n = ({ easiest: 10, easy: 9, normal: 8, hard: 8, expert: 7 })[difficulty] || 8, lv0 = ({ easiest: 0, easy: 0, normal: 1, hard: 2, expert: 2 })[difficulty] ?? 1;
-    // The piece mix moves one step bigger at 400 and 1,200 points (the level's own mix to begin with).
-    const lvNow = () => Math.min(2, lv0 + (game.score >= 400) + (game.score >= 1200));
+    const n = ({ easiest: 8, easy: 8, normal: 7, hard: 6, expert: 6 })[difficulty] || 7, lv0 = ({ easiest: 1, easy: 2, normal: 2, hard: 2, expert: 2 })[difficulty] ?? 2;
+    // The piece mix moves one step bigger at 270 and 800 points (the level's own mix to begin with); 달인 favours the big ones further.
+    const lvNow = () => Math.min(2, lv0 + (game.score >= 270) + (game.score >= 800)), boost = difficulty === "expert" ? 1.6 : 1;
     const game = { cols: n, rows: n, cells: Array(n * n).fill(0), tray: [], score: 0, combo: 0, since: 0, lines: 0, placed: 0, ended: false, won: false, last: null };
     const draw = () => {
       const lv = lvNow(), pool = BLOCK_SHAPES.filter(([w]) => w[lv] > 0);
-      let r = random() * pool.reduce((s, [w]) => s + w[lv], 0);
-      for (const [w, cells] of pool) { if ((r -= w[lv]) < 0) return cells; }
+      let r = random() * pool.reduce((s, [w]) => s + w[lv] ** boost, 0);
+      for (const [w, cells] of pool) { if ((r -= w[lv] ** boost) < 0) return cells; }
       return pool[0][1];
     };
     const piece = () => { const cells = draw(); return { cells, h: Math.max(...cells.map((c) => c[0])) + 1, w: Math.max(...cells.map((c) => c[1])) + 1, color: 1 + Math.floor(random() * 7) }; };
@@ -594,7 +596,7 @@
   }
   // 스네이크: eat, grow, never touch a wall or yourself.
   function newSnakeGame(random = Math.random, difficulty = "normal") {
-    const [n, speed] = ({ easiest: [10, 210], easy: [12, 170], normal: [15, 125], hard: [18, 90], expert: [20, 72] })[difficulty] || [15, 125];
+    const [n, speed] = ({ easiest: [15, 125], easy: [18, 90], normal: [20, 72], hard: [21, 62], expert: [22, 55] })[difficulty] || [20, 72];
     const mid = Math.floor(n / 2) * n + Math.floor(n / 2);
     const game = { cols: n, rows: n, speed, body: [mid, mid - 1, mid - 2], dir: "right", queue: [], food: -1, score: 0, ended: false, won: false };
     const placeFood = () => {
@@ -620,15 +622,15 @@
       const blocking = eats ? game.body : game.body.slice(0, -1);
       if (blocking.includes(next)) { game.ended = true; return; }
       game.body.unshift(next);
-      // Each bite speeds the snake up a little, to 55% of its starting step.
-      if (eats) { game.score++; game.speed = Math.round(speed * Math.max(0.55, Math.pow(0.97, game.score))); placeFood(); } else game.body.pop();
+      // Each bite speeds the snake up, to 55% of its starting step (never under 50 ms).
+      if (eats) { game.score++; game.speed = Math.max(50, Math.round(speed * Math.max(0.55, Math.pow(0.955, game.score)))); placeFood(); } else game.body.pop();
     };
     placeFood();
     return game;
   }
   // 딸기 우유 · 레시피: the ingredients light up in order; press them back. Each round adds one more.
   function newRecipeGame(random = Math.random, difficulty = "normal") {
-    const [pads, speed] = ({ easiest: [4, 850], easy: [4, 700], normal: [4, 520], hard: [6, 420], expert: [6, 340] })[difficulty] || [4, 520];
+    const [pads, speed] = ({ easiest: [4, 520], easy: [6, 420], normal: [6, 340], hard: [8, 300], expert: [8, 260] })[difficulty] || [6, 340];
     const game = { pads, speed, sequence: [], at: 0, round: 0, ended: false };
     game.next = () => { game.sequence.push(Math.floor(random() * pads)); game.at = 0; };
     game.press = (i) => {
@@ -636,17 +638,17 @@
       if (game.sequence[game.at] !== i) { game.ended = true; return "fail"; }
       game.at++;
       if (game.at < game.sequence.length) return "ok";
-      // Each round adds an ingredient and plays the order back a little faster, to 45% of the first.
-      game.round++; game.speed = Math.round(speed * Math.max(0.45, Math.pow(0.94, game.round))); game.next(); return "round";
+      // Each round adds an ingredient and plays the order back faster, to 45% of the first (never under 230 ms).
+      game.round++; game.speed = Math.max(230, Math.round(speed * Math.max(0.45, Math.pow(0.91, game.round)))); game.next(); return "round";
     };
     game.next();
     return game;
   }
   // 민트 초코 · 초코칩 터뜨리기: press a group of two or more touching chips of one colour; the rest fall and close up.
   function newPopGame(random = Math.random, difficulty = "normal", stage = 1) {
-    const [cols, rows, colours0] = ({ easiest: [7, 5, 3], easy: [8, 6, 3], normal: [10, 8, 4], hard: [12, 9, 5], expert: [12, 10, 6] })[difficulty] || [10, 8, 4];
-    // One more colour every second stage, up to six. A board left with a row's worth of chips or fewer opens the next.
-    const colours = Math.min(6, colours0 + Math.floor((stage - 1) / 2));
+    const [cols, rows, colours0] = ({ easiest: [10, 8, 4], easy: [12, 9, 5], normal: [12, 10, 6], hard: [12, 11, 6], expert: [12, 12, 6] })[difficulty] || [12, 10, 6];
+    // One more colour every 1⅓ stages, up to six. A board left with a row's worth of chips or fewer opens the next.
+    const colours = Math.min(6, colours0 + Math.floor((stage - 1) * 0.75));
     const cells = Array.from({ length: cols * rows }, () => 1 + Math.floor(random() * colours));
     const game = { cols, rows, colours, cells, score: 0, ended: false, won: false };
     game.group = (i) => {
@@ -681,11 +683,11 @@
   // 라벤더 · 꽃밭 퍼즐: slide the pieces into the empty spot until they read in order. Shuffled by legal moves,
   // so every board can be solved.
   function newSlideGame(random = Math.random, difficulty = "normal", stage = 1) {
-    const n0 = ({ easiest: 3, easy: 3, normal: 4, hard: 5, expert: 6 })[difficulty] || 4, n = Math.min(6, n0 + stage - 1);
-    // 입문's first board is shuffled with only a few moves.
-    const shuffles = difficulty === "easiest" && stage === 1 ? 24 : n * n * 30;
+    const n0 = ({ easiest: 4, easy: 5, normal: 6, hard: 6, expert: 6 })[difficulty] || 6, n = Math.min(6, n0 + stage - 1);
+    const shuffles = n * n * 30;
     const cells = Array.from({ length: n * n }, (_, i) => (i + 1) % (n * n));
-    const game = { cols: n, rows: n, cells, moves: 0, ended: false, won: false };
+    // 달인 does not mark the pieces that are home.
+    const game = { cols: n, rows: n, cells, blind: difficulty === "expert", moves: 0, ended: false, won: false };
     const blank = () => cells.indexOf(0);
     const near = (i, j) => Math.abs(i % n - j % n) + Math.abs(Math.floor(i / n) - Math.floor(j / n)) === 1;
     game.solved = () => cells.every((v, i) => v === (i + 1) % (n * n));
@@ -708,9 +710,9 @@
   // 밤하늘 · 별 밝히기: pressing a star switches it and its four neighbours; light every star. Made by pressing
   // from all-lit, so it can always be solved.
   function newLightsGame(random = Math.random, difficulty = "normal", stage = 1) {
-    const [n0, presses0] = ({ easiest: [3, 3], easy: [4, 4], normal: [5, 7], hard: [6, 12], expert: [7, 18] })[difficulty] || [5, 7];
-    // Each stage two more scrambling presses; every third stage a row and column more (up to 8×8).
-    const n = Math.min(8, n0 + Math.floor((stage - 1) / 3)), presses = Math.min(Math.floor(n * n * 0.6), presses0 + 2 * (stage - 1));
+    const [n0, presses0] = ({ easiest: [5, 7], easy: [6, 12], normal: [7, 18], hard: [8, 25], expert: [8, 34] })[difficulty] || [7, 18];
+    // Each stage three more scrambling presses; every second stage a row and column more (up to 8×8).
+    const n = Math.min(8, n0 + Math.floor((stage - 1) / 2)), presses = Math.min(Math.floor(n * n * 0.6), presses0 + 3 * (stage - 1));
     const cells = Array(n * n).fill(true);
     const game = { cols: n, rows: n, cells, moves: 0, ended: false, won: false };
     const flip = (i) => { const x = i % n, y = Math.floor(i / n); for (const [a, b] of [[x, y], [x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]) if (a >= 0 && a < n && b >= 0 && b < n) cells[b * n + a] = !cells[b * n + a]; };
@@ -722,7 +724,7 @@
     return game;
   }
   // 마카롱 낙하 (테트리스 방식): pieces of four from a shuffled bag of seven fall one at a time; a full row melts,
-  // the pile reaching the top ends it. Ghost, hold, three-piece preview; one level per 10 rows, each faster.
+  // the pile reaching the top ends it. Ghost, hold, three-piece preview; one level per 7 rows, each faster.
   const DROP_PIECES = {
     I: [[0, 1], [1, 1], [2, 1], [3, 1]], O: [[1, 0], [2, 0], [1, 1], [2, 1]], T: [[1, 0], [0, 1], [1, 1], [2, 1]],
     S: [[1, 0], [2, 0], [0, 1], [1, 1]], Z: [[0, 0], [1, 0], [1, 1], [2, 1]], J: [[0, 0], [0, 1], [1, 1], [2, 1]], L: [[2, 0], [0, 1], [1, 1], [2, 1]],
@@ -730,7 +732,7 @@
   const DROP_COLOURS = { I: 5, O: 3, T: 6, S: 4, Z: 7, J: 1, L: 2 };
   const DROP_POINTS = [0, 100, 300, 500, 800];
   function newDropGame(random = Math.random, difficulty = "normal") {
-    const [start, slow, holdOk] = ({ easiest: [1, 1.7, true], easy: [1, 1.35, true], normal: [1, 1, true], hard: [6, 1, false], expert: [10, 1, false] })[difficulty] || [1, 1, true];
+    const [start, slow, holdOk] = ({ easiest: [1, 1, true], easy: [6, 1, false], normal: [10, 1, false], hard: [14, 1, false], expert: [18, 1, false] })[difficulty] || [10, 1, false];
     const cols = 10, rows = 20;
     const game = { cols, rows, cells: Array(cols * rows).fill(0), piece: null, next: [], hold: null, held: false, holdOk,
       score: 0, lines: 0, level: start, combo: -1, locks: 0, slams: 0, ended: false, won: false, last: null, fall: 0, grounded: 0, resets: 0 };
@@ -780,7 +782,7 @@
       const gained = DROP_POINTS[full.length] * game.level + (full.length && game.combo > 0 ? 50 * game.combo * game.level : 0);
       game.score += gained; game.lines += full.length;
       game.last = { rows: full, gained, combo: game.combo, at: game.locks };
-      game.level = Math.max(game.level, start + Math.floor(game.lines / 10));
+      game.level = Math.max(game.level, start + Math.floor(game.lines / 7));
       game.held = false;
       spawn(game.next.shift()); refill();
     };
@@ -814,7 +816,7 @@
   /* Four well-known mobile games, played the way the originals play. All four run on their own clock and pause with the panel. */
   // Chrome's T-Rex runner on its own 600×150 field. Speeds are in px per 60fps frame, as in the original source.
   function newDinoGame(random = Math.random, difficulty = 'normal') {
-    const cfg = ({ easiest: { start: 5, accel: 0.0005, max: 8.5 }, easy: { start: 5.5, accel: 0.0007, max: 10 }, normal: { start: 6, accel: 0.001, max: 13 }, hard: { start: 7, accel: 0.0016, max: 13 }, expert: { start: 8, accel: 0.0022, max: 15 } })[difficulty] || { start: 6, accel: 0.001, max: 13 };
+    const cfg = ({ easiest: { start: 6, accel: 0.0015, max: 13 }, easy: { start: 7, accel: 0.0024, max: 13 }, normal: { start: 8, accel: 0.0033, max: 15 }, hard: { start: 9, accel: 0.0041, max: 16 }, expert: { start: 10, accel: 0.0049, max: 17 } })[difficulty] || { start: 8, accel: 0.0033, max: 15 };
     const TYPES = { small: { w: 17, h: 35, multi: 4, gap: 120 }, large: { w: 25, h: 50, multi: 7, gap: 120 }, ptero: { w: 46, h: 40, multi: 99, gap: 150 } };
     const game = { W: 600, H: 150, x: 50, y: 0, vy: 0, holding: false, reachedMin: false, ducking: false, started: false, ended: false, won: false,
       speed: cfg.start, distance: 0, score: 0, obstacles: [], time: 0, runTime: 0, flash: 0, hundreds: 0, endedAt: 0, kinds: [] };
@@ -874,11 +876,11 @@
     return game;
   }
 
-  // Water Sort Puzzle: levels that grow by a colour every two, four layers a tube, five undos and one spare tube a level.
+  // Water Sort Puzzle: levels that grow by colours as they go, four layers a tube, five undos and one spare tube a level.
   function newWaterSortGame(random = Math.random, difficulty = 'normal', level = 1) {
-    // The first level's colours, and every how many levels one more joins.
-    const [base, every] = ({ easiest: [3, 3], easy: [3, 2], normal: [4, 2], hard: [6, 2], expert: [7, 1] })[difficulty] || [4, 2];
-    const colors = Math.min(10, base + Math.floor((level - 1) / every)), capacity = 4;
+    // The first level's colours, and the pace of the rest (1.5 colours per "every" levels).
+    const [base, every] = ({ easiest: [4, 2], easy: [6, 2], normal: [7, 1], hard: [8, 1], expert: [9, 1] })[difficulty] || [7, 1];
+    const colors = Math.min(10, base + Math.floor((level - 1) * 1.5 / every)), capacity = 4;
     const game = { level, difficulty, colors, capacity, bottles: [], moves: 0, ended: false, won: false, history: [], undos: 5, extra: false };
     const solved = () => game.bottles.every(b => !b.length || b.length === capacity && b.every(c => c === b[0]));
     const run = b => { let n = 0; for (let i = b.length - 1; i >= 0 && b[i] === b[b.length - 1]; i--) n++; return n; };
@@ -934,7 +936,7 @@
 
   // Knife Hit: endless stages on a spinning log, every fifth a boss; the log changes speed, stops and turns back.
   function newKnifeGame(random = Math.random, difficulty = 'normal') {
-    const cfg = ({ easiest: [1.1, 4], easy: [1.5, 5], normal: [2.1, 6], hard: [2.7, 7], expert: [3.2, 8] })[difficulty] || [2.1, 6];
+    const cfg = ({ easiest: [2.1, 6], easy: [2.7, 7], normal: [3.2, 8], hard: [3.7, 9], expert: [4.2, 10] })[difficulty] || [3.2, 8];
     const tau = Math.PI * 2, norm = a => (a % tau + tau) % tau, gapTo = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
     const PATTERNS = ['steady', 'wobble', 'reverse', 'stopgo'];
     const game = { stage: 0, score: 0, apples: 0, angle: 0, spin: 0, dir: 1, base: cfg[0], knives: [], fruit: [], remaining: 0, total: 0, flight: null, wait: 0,
@@ -950,11 +952,11 @@
     const free = (list, gap) => { for (let k = 0; k < 40; k++) { const a = random() * tau; if (list.every(b => gapTo(a, b) > gap)) return a; } return null; };
     game.next = () => {
       game.stage++; game.boss = game.stage % 5 === 0; game.stageTime = 0; game.angle = random() * tau; game.dir = random() < 0.5 ? 1 : -1;
-      game.base = cfg[0] + Math.min(1.2, (game.stage - 1) * 0.08);
+      game.base = cfg[0] + Math.min(1.8, (game.stage - 1) * 0.12);
       game.pattern = game.boss ? 'boss' : game.stage === 1 ? 'steady' : PATTERNS[Math.floor(random() * PATTERNS.length)];
-      game.total = game.remaining = Math.min(cfg[1] + Math.floor((game.stage - 1) / 2) + (game.boss ? 2 : 0), 11);
+      game.total = game.remaining = Math.min(cfg[1] + Math.floor((game.stage - 1) * 0.75) + (game.boss ? 2 : 0), 12);
       game.knives = [];
-      const pre = game.stage === 1 ? 0 : Math.min(4, Math.floor(random() * (2 + game.stage / 3)));
+      const pre = game.stage === 1 ? 0 : Math.min(4, Math.floor(random() * (2 + game.stage / 2)));
       for (let i = 0; i < pre; i++) { const a = free(game.knives, 0.6); if (a != null) game.knives.push(a); }
       game.fruit = [];
       if (!game.boss && random() < 0.5) { const a = free(game.knives, 0.5); if (a != null) game.fruit.push(a); }
@@ -990,9 +992,9 @@
 
   // Count Masters: run a road, pick gates, lose men to walls, saws and enemy crowds, then climb the bonus stairs.
   function newCountMastersGame(random = Math.random, difficulty = 'normal', stage = 1) {
-    const base = ({ easiest: { start: 8, enemy: 0.25, bad: 0.2 }, easy: { start: 5, enemy: 0.35, bad: 0.3 }, normal: { start: 1, enemy: 0.5, bad: 0.45 }, hard: { start: 1, enemy: 0.65, bad: 0.6 }, expert: { start: 1, enemy: 0.75, bad: 0.72 } })[difficulty] || { start: 1, enemy: 0.5, bad: 0.45 };
-    // Each stage the enemy crowds are a tenth bigger and bad gates likelier; along the course each crowd grows too.
-    const cfg = { start: base.start, enemy: Math.min(0.9, base.enemy * (1 + 0.1 * (stage - 1))), bad: Math.min(0.85, base.bad + 0.04 * (stage - 1)) };
+    const base = ({ easiest: { start: 1, enemy: 0.5, bad: 0.45 }, easy: { start: 1, enemy: 0.65, bad: 0.6 }, normal: { start: 1, enemy: 0.75, bad: 0.72 }, hard: { start: 1, enemy: 0.82, bad: 0.8 }, expert: { start: 1, enemy: 0.88, bad: 0.85 } })[difficulty] || { start: 1, enemy: 0.75, bad: 0.72 };
+    // Each stage the enemy crowds are 15% bigger and bad gates likelier; along the course each crowd grows too.
+    const cfg = { start: base.start, enemy: Math.min(0.92, base.enemy * (1 + 0.15 * (stage - 1))), bad: Math.min(0.9, base.bad + 0.06 * (stage - 1)) };
     let fights = 0;
     const game = { x: 0, target: 0, direction: 0, count: cfg.start, z: 0, speed: 14, events: [], started: false, ended: false, won: false, score: 0, maxCount: 0,
       note: '', noteTime: 0, noteGood: true, phase: 'run', fight: null, acc: 0, steps: 0, stairT: 0, mult: 1, finishCount: 0, time: 0, stepCost: 3, maxSteps: 30 };
@@ -1005,7 +1007,7 @@
         game.events.push({ z, type: 'gate', gates: random() < 0.5 ? [good, other] : [other, good] });
         expect = good.op === '*' ? expect * good.v : expect + good.v;
       } else if (kind === 'enemy') {
-        const v = Math.max(2, Math.round(expect * Math.min(0.92, cfg.enemy * (1 + 0.12 * fights++)))); game.events.push({ z, type: 'enemy', value: v, left: v }); expect -= v;
+        const v = Math.max(2, Math.round(expect * Math.min(0.92, cfg.enemy * (1 + 0.18 * fights++)))); game.events.push({ z, type: 'enemy', value: v, left: v }); expect -= v;
       } else if (kind === 'block') {
         const leftSide = random() < 0.5; game.events.push({ z, type: 'block', from: leftSide ? -1 : 0.08, to: leftSide ? -0.08 : 1 });
       } else game.events.push({ z, type: 'saw', c: -0.5 + random(), amp: 0.35, phase: random() * 6, half: 0.26 });
@@ -1073,9 +1075,9 @@
   // Each level has a target score and a move budget; leftover moves become striped candies at the end (sugar crush).
   // The board settles one event at a time (settle()), so the view can animate every clear and every fall.
   function newCandyGame(random = Math.random, difficulty = 'normal', level = 1) {
-    const cfg = ({ easiest: { colors: 5, moves: 30 }, easy: { colors: 5, moves: 25 }, normal: { colors: 6, moves: 20 }, hard: { colors: 6, moves: 16 }, expert: { colors: 6, moves: 13 } })[difficulty] || { colors: 6, moves: 20 };
+    const cfg = ({ easiest: { colors: 6, moves: 20 }, easy: { colors: 6, moves: 16 }, normal: { colors: 6, moves: 13 }, hard: { colors: 6, moves: 11 }, expert: { colors: 6, moves: 10 } })[difficulty] || { colors: 6, moves: 13 };
     const R = 8, C = 8;
-    const game = { rows: R, cols: C, colors: cfg.colors, level, difficulty, moves: cfg.moves, target: Math.round((1000 + (level - 1) * 350) / 10) * 10,
+    const game = { rows: R, cols: C, colors: cfg.colors, level, difficulty, moves: cfg.moves, target: Math.round((1000 + (level - 1) * 525) / 10) * 10,
       score: 0, grid: [], phase: 'idle', pending: null, cascade: 0, sugar: false, ended: false, won: false, nextId: 1, swaps: 0 };
     const make = (color, kind = 'n') => ({ id: game.nextId++, color, kind });
     const at = (r, c) => r >= 0 && r < R && c >= 0 && c < C ? game.grid[r][c] : null;
@@ -1256,6 +1258,236 @@
     return game;
   }
 
+  // Jelly Survivors: a jelly hero shoots the nearest blob by itself; sugar crystals fill the level bar, each level offers three upgrades.
+  // The field is 360×520. Enemies grow tougher and faster with time, and a big blob arrives every minute.
+  function newSurviveGame(random = Math.random, difficulty = 'normal') {
+    const cfg = ({ easiest: [5, 0.09, 1.3], easy: [4, 0.11, 1.5], normal: [3, 0.13, 1.75], hard: [2, 0.15, 2], expert: [2, 0.18, 2.3] })[difficulty] || [3, 0.13, 1.75];
+    const W = 360, H = 520;
+    const UPS = {
+      dmg: ['🍬', '단맛 폭탄', '피해 +30%', g => { g.dmg *= 1.3; }],
+      rate: ['⚡', '빠른 손', '발사 간격 -15%', g => { g.cool = Math.max(0.2, g.cool * 0.85); }],
+      multi: ['✨', '여러 갈래', '발사체 +1', g => { g.shots = Math.min(6, g.shots + 1); }],
+      orbit: ['🍭', '사탕 방패', '돌아가는 사탕 +1', g => { g.orbit = Math.min(6, g.orbit + 1); }],
+      speed: ['👟', '날쌘 젤리', '이동 속도 +15%', g => { g.speed = Math.min(170, g.speed * 1.15); }],
+      pickup: ['🧲', '자석 껌', '줍는 범위 +40%', g => { g.pickup *= 1.4; }],
+      maxhp: ['🧡', '탄탄 젤리', '최대 HP +1 · 1 회복', g => { g.maxHp++; g.hp = Math.min(g.maxHp, g.hp + 1); }],
+      heal: ['🍯', '시럽 회복', 'HP 2 회복', g => { g.hp = Math.min(g.maxHp, g.hp + 2); }],
+    };
+    const game = { w: W, h: H, hero: { x: W / 2, y: H / 2, r: 11 }, hp: cfg[0], maxHp: cfg[0], dmg: 1, cool: 0.8, shots: 1, orbit: 0, speed: 100, pickup: 38,
+      enemies: [], bullets: [], gems: [], time: 0, over: 0, kills: 0, score: 0, level: 1, xp: 0, need: 5, pending: 0, choices: null, started: false, ended: false,
+      invuln: 0, hurtAt: -9, killAt: -9, gemAt: -9, levelAt: -9, bigAt: -9, spin: 0, fire: 0, dx: 0, dy: 0, nextBig: 60, spawnAcc: 0 };
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    game.ups = UPS;
+    game.start = () => { if (!game.ended) game.started = true; };
+    // The stick: a direction with length 0..1.
+    game.aim = (x, y) => { const m = Math.hypot(x, y); if (!(m > 0)) { game.dx = game.dy = 0; return; } const k = Math.min(1, m) / m; game.dx = x * k; game.dy = y * k; };
+    game.grow = () => 1 + cfg[1] * game.time / 7;
+    game.rate = () => cfg[2] * (1 + game.time / 53);
+    const offer = () => {
+      const ids = Object.keys(UPS).filter(k => k !== 'heal' || game.hp < game.maxHp);
+      game.choices = [];
+      while (game.choices.length < 3 && ids.length) { const id = ids.splice(Math.floor(random() * ids.length), 1)[0]; game.choices.push({ id, icon: UPS[id][0], name: UPS[id][1], desc: UPS[id][2] }); }
+    };
+    game.pick = i => {
+      const c = game.choices && game.choices[i];
+      if (!c) return false;
+      UPS[c.id][3](game); game.choices = null;
+      if (game.pending > 0) { game.pending--; offer(); }
+      return true;
+    };
+    const spawn = big => {
+      const side = Math.floor(random() * 4), t = random(), m = game.grow(), k = big ? Math.floor(game.time / 60) : 0;
+      const e = { x: side < 2 ? t * W : side === 2 ? -8 : W + 8, y: side === 0 ? -8 : side === 1 ? H + 8 : t * H, kind: Math.floor(random() * 4), hit: 0, big, push: 0 };
+      e.hp = e.max = big ? 14 * m * (1 + 0.45 * (k - 1)) : 1.6 * m;
+      e.speed = clamp((big ? 24 : 30) * (1 + cfg[1] * game.time / 20), 20, big ? 52 : 82) * (0.9 + random() * 0.2);
+      e.r = big ? 21 : 10 + random() * 2; e.dmg = big ? 2 : 1;
+      game.enemies.push(e);
+    };
+    const kill = e => {
+      game.kills++; game.killAt = game.time;
+      const n = e.big ? 6 : 1;
+      for (let i = 0; i < n; i++) game.gems.push({ x: e.x + (n > 1 ? (random() - 0.5) * 40 : 0), y: e.y + (n > 1 ? (random() - 0.5) * 40 : 0), v: e.big ? 3 : 1 });
+    };
+    const hurt = (e, dmg) => { e.hp -= dmg; e.hit = 0.1; if (e.hp <= 0 && !e.dead) { e.dead = true; kill(e); } };
+    const tick = dt => {
+      const h = game.hero;
+      game.time += dt; game.spin += dt * 3; game.invuln = Math.max(0, game.invuln - dt);
+      h.x = clamp(h.x + game.dx * game.speed * dt, h.r, W - h.r); h.y = clamp(h.y + game.dy * game.speed * dt, h.r, H - h.r);
+      // Spawns: a steady rate that climbs, a big blob every minute.
+      game.spawnAcc += game.rate() * dt;
+      while (game.spawnAcc >= 1) { game.spawnAcc--; if (game.enemies.length < 90) spawn(false); }
+      if (game.time >= game.nextBig) { game.nextBig += 60; spawn(true); game.bigAt = game.time; }
+      // Chase, push apart a little, touch.
+      const list = game.enemies;
+      for (const e of list) {
+        const d = Math.hypot(h.x - e.x, h.y - e.y) || 1;
+        e.x += (h.x - e.x) / d * e.speed * dt; e.y += (h.y - e.y) / d * e.speed * dt; e.hit = Math.max(0, e.hit - dt); e.push = Math.max(0, e.push - dt);
+        if (d < e.r + h.r * 0.8 && !game.invuln) {
+          game.hp -= e.dmg; game.invuln = 1; game.hurtAt = game.time;
+          for (const o of list) { const od = Math.hypot(o.x - h.x, o.y - h.y) || 1; if (od < 60) { o.x += (o.x - h.x) / od * 40; o.y += (o.y - h.y) / od * 40; } }
+          if (game.hp <= 0) { game.hp = 0; game.ended = true; }
+        }
+      }
+      for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+        const a = list[i], b = list[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), min = (a.r + b.r) * 0.8;
+        if (d > 0 && d < min) { const s = (min - d) / 2 / d; a.x -= dx * s; a.y -= dy * s; b.x += dx * s; b.y += dy * s; }
+      }
+      // Auto fire at the nearest blob, fanned out when there are several shots.
+      game.fire -= dt;
+      if (game.fire <= 0 && list.length) {
+        let near = null, best = Infinity;
+        for (const e of list) { const d = Math.hypot(e.x - h.x, e.y - h.y); if (d < best) { best = d; near = e; } }
+        if (best < 300) {
+          game.fire = game.cool; const a = Math.atan2(near.y - h.y, near.x - h.x);
+          for (let i = 0; i < game.shots; i++) { const b = a + (i - (game.shots - 1) / 2) * 0.2; game.bullets.push({ x: h.x, y: h.y, vx: Math.cos(b) * 280, vy: Math.sin(b) * 280, life: 1.1 }); }
+        }
+      }
+      for (const b of game.bullets) {
+        b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+        for (const e of list) if (!e.dead && Math.hypot(e.x - b.x, e.y - b.y) < e.r + 4) { hurt(e, game.dmg); b.life = 0; break; }
+      }
+      // Orbiting candies hurt what they touch, once in a while per blob.
+      for (let k = 0; k < game.orbit; k++) {
+        const a = game.spin + k * Math.PI * 2 / game.orbit, ox = h.x + Math.cos(a) * 40, oy = h.y + Math.sin(a) * 40;
+        for (const e of list) if (!e.dead && !e.push && Math.hypot(e.x - ox, e.y - oy) < e.r + 7) { e.push = 0.4; hurt(e, game.dmg * 0.7); const d = Math.hypot(e.x - h.x, e.y - h.y) || 1; e.x += (e.x - h.x) / d * 8; e.y += (e.y - h.y) / d * 8; }
+      }
+      game.enemies = list.filter(e => !e.dead); game.bullets = game.bullets.filter(b => b.life > 0 && b.x > -20 && b.x < W + 20 && b.y > -20 && b.y < H + 20);
+      // Crystals drift to the hero inside the pickup radius.
+      for (const g of game.gems) {
+        const d = Math.hypot(h.x - g.x, h.y - g.y) || 1;
+        if (d < game.pickup) { g.x += (h.x - g.x) / d * 230 * dt; g.y += (h.y - g.y) / d * 230 * dt; }
+        if (d < h.r + 6) { g.got = true; game.xp += g.v; game.gemAt = game.time; }
+      }
+      game.gems = game.gems.filter(g => !g.got);
+      while (game.xp >= game.need) {
+        game.xp -= game.need; game.level++; game.need = Math.round(game.need * 1.3 + 3); game.levelAt = game.time;
+        if (game.choices) game.pending++; else offer();
+      }
+      game.score = Math.floor(game.time) * 10 + game.kills;
+    };
+    game.step = ms => {
+      if (!game.started) return;
+      if (game.ended) { game.over += Math.max(0, Math.min(250, ms)) / 1000; return; }
+      let left = Math.max(0, Math.min(250, ms)) / 1000;
+      // A level-up pauses the run until a card is picked.
+      while (left > 0 && !game.ended && !game.choices) { const dt = Math.min(left, 1 / 60); left -= dt; tick(dt); }
+    };
+    return game;
+  }
+
+  // Cloud Stairs: a zigzag staircase of cloud blocks; each step is straight on or turned. Climb keeps the facing, turn flips it first.
+  function newStairsGame(random = Math.random, difficulty = 'normal') {
+    // Start drain per second, extra drain per step climbed, refill per step, share of turned steps.
+    const cfg = ({ easiest: [0.3, 0.00225, 0.09, 0.45], easy: [0.36, 0.003, 0.085, 0.52], normal: [0.42, 0.0039, 0.08, 0.6], hard: [0.46, 0.0045, 0.075, 0.68], expert: [0.5, 0.0052, 0.072, 0.76] })[difficulty] || [0.42, 0.0039, 0.08, 0.6];
+    const game = { n: 0, face: 1, left: 1, coins: 0, score: 0, started: false, ended: false, clock: 0, fail: null, dirs: [1, 1], cols: [0, 1], coin: [false, false], climbAt: -9, coinAt: -9, last: 'climb' };
+    const make = i => {
+      while (game.dirs.length <= i) {
+        const k = game.dirs.length;
+        game.dirs.push(random() < cfg[3] ? -game.dirs[k - 1] : game.dirs[k - 1]); game.cols.push(game.cols[k - 1] + game.dirs[k]); game.coin.push(k > 2 && random() < 0.12);
+      }
+    };
+    game.dirAt = i => { make(i); return game.dirs[i]; };
+    game.colAt = i => { make(i); return game.cols[i]; };
+    game.hasCoin = i => { make(i); return game.coin[i]; };
+    game.drain = () => Math.min(1.6, cfg[0] + cfg[1] * game.n);
+    const act = turn => {
+      if (game.ended) return false;
+      game.started = true;
+      const face = turn ? -game.face : game.face, ok = face === game.dirAt(game.n + 1);
+      game.face = face; game.last = turn ? 'turn' : 'climb';
+      if (!ok) { game.ended = true; game.fail = { t: game.clock, why: 'wrong', dir: face }; return false; }
+      game.n++; game.score = game.n; game.left = Math.min(1, game.left + cfg[2]); game.climbAt = game.clock;
+      if (game.hasCoin(game.n)) { game.coins++; game.coinAt = game.clock; }
+      make(game.n + 8);
+      return true;
+    };
+    make(10);
+    game.climb = () => act(false);
+    game.turn = () => act(true);
+    game.step = ms => {
+      const dt = Math.max(0, Math.min(250, ms)) / 1000;
+      game.clock += dt;
+      if (!game.started || game.ended) return;
+      game.left -= game.drain() * dt;
+      if (game.left <= 0) { game.left = 0; game.ended = true; game.fail = { t: game.clock, why: 'time', dir: game.face }; }
+    };
+    return game;
+  }
+
+  // 솜사탕 질주 (hidden): a cotton-candy bunny runs a candy road by itself. Jump, once more in the air; slide while held
+  // under high bars; low blocks and pits are jumped. Candies add score, milk bottles refill the energy that drains all the
+  // time; a bump costs a chunk of it and a short blink of safety; the run ends at no energy or in a pit. Speed and
+  // the number of obstacles climb with the distance run. Lengths are px, speeds px per second, heights above the road.
+  function newDashGame(random = Math.random, difficulty = 'normal') {
+    // start speed, top speed, energy drained a second, a bump's cost, a bottle's refill
+    const [start, top, drain, cost, milk] = ({ easiest: [250, 430, 0.022, 0.16, 0.3], easy: [280, 480, 0.026, 0.18, 0.28], normal: [310, 540, 0.03, 0.2, 0.26], hard: [340, 600, 0.034, 0.22, 0.24], expert: [370, 660, 0.038, 0.25, 0.22] })[difficulty] || [310, 540, 0.03, 0.2, 0.26];
+    const RAMP = 24000, GROUND = 190, BAR = 30; // distance to top speed and densest road; the high bars' lower edge
+    const game = { W: 640, H: 240, GROUND, BAR, x: 96, y: 0, vy: 0, jumps: 0, sliding: false, started: false, ended: false, won: false, speed: start, distance: 0, metres: 0,
+      candies: 0, score: 0, energy: 1, hurt: 0, hits: 0, obstacles: [], items: [], time: 0, gap: 520, bottle: 2000, hitAt: -9, candyAt: -9, bottleAt: -9, fail: null };
+    game.level = () => Math.min(1, game.distance / RAMP);
+    // The bunny's hit box: tall standing, low and wide sliding on the road.
+    game.box = () => game.sliding && game.y === 0 ? { x: game.x - 24, w: 48, y: 0, h: 20 } : { x: game.x - 13, w: 26, y: game.y, h: 44 };
+    const boxOf = o => o.kind === 'bar' ? { x: o.x + 3, w: o.w - 6, y: BAR, h: 400 } : { x: o.x + 3, w: o.w - 6, y: 0, h: o.h - 3 };
+    game.jump = () => {
+      if (game.ended) return false;
+      game.started = true;
+      if (game.y > 0) { if (game.jumps >= 2) return false; game.jumps = 2; game.vy = 540; return true; }
+      game.jumps = 1; game.vy = 600; game.y = 0.01; return true;
+    };
+    game.slide = held => { game.sliding = !!held && !game.ended; if (game.sliding) game.started = true; };
+    const spawn = () => {
+      const lv = game.level(), air = game.speed * 0.667, r = random(), kind = game.distance < 900 || r < 0.38 ? 'low' : r < 0.68 ? 'bar' : 'pit';
+      const o = kind === 'low' ? { kind, w: 28 + random() * 14, h: lv > 0.4 && random() < 0.25 ? 56 : 30 + random() * 16 } : kind === 'bar' ? { kind, w: 46, h: 0 } : { kind, w: air * (0.3 + 0.3 * random() + 0.2 * lv), h: 0 };
+      o.x = game.W + 30; game.obstacles.push(o);
+      // The next one comes after a gap that shortens with the distance (never under 0.8 s of running).
+      game.gap = o.w + game.speed * Math.max(0.8, (1.55 - 0.7 * lv) * (0.85 + random() * 0.4));
+      const put = (kind2, x, y) => game.items.push({ kind: kind2, x, y });
+      const mid = o.x + game.gap * 0.5;
+      if (kind === 'low') for (const k of [-1, 0, 1]) put('candy', o.x + o.w / 2 + k * 40, 80 - 20 * Math.abs(k));
+      else if (kind === 'bar') for (const k of [-1.5, -0.5, 0.5, 1.5]) put('candy', o.x + o.w / 2 + k * 24, 16);
+      else for (let k = 0; k < 5; k++) put('candy', o.x + o.w * (k + 0.5) / 5, 50 + 50 * Math.sin(Math.PI * (k + 0.5) / 5));
+      if (random() < 0.4) for (let k = 0; k < 4; k++) put('candy', mid + k * 26 - 39, 16);
+      if (game.distance >= game.bottle) { put('milk', mid, random() < 0.6 ? 80 : 18); game.bottle = game.distance + 2400 + random() * 800; }
+    };
+    const fail = why => { game.ended = true; game.fail = { t: game.time, why }; game.sliding = false; };
+    game.step = ms => {
+      if (!game.started || game.ended) return;
+      let left = Math.max(0, Math.min(100, ms)) / 1000;
+      while (left > 0 && !game.ended) {
+        const dt = Math.min(left, 1 / 120); left -= dt; game.time += dt;
+        game.hurt = Math.max(0, game.hurt - dt); game.energy -= drain * dt;
+        game.speed = start + (top - start) * game.level();
+        const px = game.speed * dt; game.distance += px;
+        if (game.y > 0) {
+          // Sliding in the air drops faster.
+          game.vy -= 1800 * (game.sliding ? 2.2 : 1) * dt; game.y += game.vy * dt;
+          if (game.y <= 0) { game.y = 0; game.vy = 0; game.jumps = 0; }
+        }
+        for (const o of game.obstacles) o.x -= px;
+        for (const it of game.items) it.x -= px;
+        game.obstacles = game.obstacles.filter(o => o.x + o.w > -30); game.items = game.items.filter(it => it.x > -30);
+        game.gap -= px; if (game.gap <= 0) spawn();
+        // Standing on the road over a pit (a few px of edge are forgiven) ends the run.
+        if (game.y === 0 && game.obstacles.some(o => o.kind === 'pit' && game.x > o.x + 8 && game.x < o.x + o.w - 8)) { fail('pit'); break; }
+        const b = game.box();
+        if (!game.hurt) for (const o of game.obstacles) {
+          if (o.kind === 'pit') continue;
+          const ob = boxOf(o);
+          if (b.x < ob.x + ob.w && b.x + b.w > ob.x && b.y < ob.y + ob.h && b.y + b.h > ob.y) { game.hurt = 1.1; game.energy -= cost; game.hits++; game.hitAt = game.time; break; }
+        }
+        for (const it of game.items) {
+          if (it.got || it.x < b.x - 10 || it.x > b.x + b.w + 10 || it.y < b.y - 10 || it.y > b.y + b.h + 10) continue;
+          it.got = true;
+          if (it.kind === 'milk') { game.energy = Math.min(1, game.energy + milk); game.bottleAt = game.time; } else { game.candies++; game.candyAt = game.time; }
+        }
+        game.items = game.items.filter(it => !it.got);
+        game.metres = Math.floor(game.distance / 40); game.score = game.candies * 10 + game.metres;
+        if (game.energy <= 0) { game.energy = 0; fail('tired'); }
+      }
+    };
+    return game;
+  }
+
   function writingLoad(h) {
     if (!h) return false;
     // A story fetch/entry is not generation. The Forge screen also covers image generation after text is ready.
@@ -1384,29 +1616,32 @@
     // The 말랑 extension shares its SD sprites when it is on; without it the cards are fruit.
     const faces = () => { try { return [...new Set(window.__GFX_SD_FACES?.() || [])].filter(Boolean); } catch { return []; } };
     const GAMES = {
-      mines: { name: '지뢰찾기', icon: '💣', level: 'easy', stages: true, levels: [['easiest', '입문', '7×7 · 6개'], ['easy', '쉬움', '8×8 · 10개'], ['normal', '보통', '10×10 · 18개'], ['hard', '어려움', '12×12 · 30개'], ['expert', '달인', '14×14 · 45개']], make: (lv, s) => newMineGame(Math.random, lv, s) },
-      fruits: { name: '사과 상자', icon: '🍎', level: 'normal', levels: [['easiest', '입문', '4분 · 1~5'], ['easy', '쉬움', '3분 · 1~5'], ['normal', '보통', '2분 · 1~9'], ['hard', '어려움', '1분 30초'], ['expert', '달인', '1분 · 큰 상자']], make: (lv) => newFruitGame(Math.random, lv) },
-      merge: { name: '2048', icon: '🔢', level: 'normal', levels: [['easiest', '입문', '6×6'], ['easy', '쉬움', '5×5'], ['normal', '보통', '4×4'], ['hard', '어려움', '3×3 · 256'], ['expert', '달인', '3×3 · 512']], make: (lv) => new2048Game(Math.random, lv) },
-      memory: { name: '짝 맞추기', icon: '🃏', level: 'easy', stages: true, levels: [['easiest', '입문', '4쌍'], ['easy', '쉬움', '6쌍'], ['normal', '보통', '8쌍'], ['hard', '어려움', '12쌍'], ['expert', '달인', '15쌍']], make: (lv, s) => newMemoryGame(Math.random, lv, faces(), s) },
-      shop: { name: '쿠키 가게', icon: '🍪', level: 'normal', stages: true, levels: [['easiest', '입문', '목표 4,000원 · 아주 느긋 · ♥6'], ['easy', '쉬움', '목표 6,000원 · 손님 느긋 · ♥5'], ['normal', '보통', '목표 10,000원 · ♥4'], ['hard', '어려움', '목표 15,000원 · 손님 급함 · ♥3'], ['expert', '달인', '목표 20,000원 · 오븐도 빨라요 · ♥3']], make: (lv, s) => newShopGame(Math.random, lv, s) },
-      pinball: { name: '디저트 핀볼', tab: '핀볼', icon: '🎱', level: 'normal', levels: [['easiest', '입문', '공 7개 · 볼 세이브 15초 · 아주 넓은 플리퍼'], ['easy', '쉬움', '공 5개 · 볼 세이브 10초 · 넓은 플리퍼'], ['normal', '보통', '공 3개 · 볼 세이브 5초'], ['hard', '어려움', '공 3개 · 세이브 없음 · 짧은 플리퍼'], ['expert', '달인', '공 3개 · 세이브 없음 · 아주 짧은 플리퍼 · 무겁게']], make: (lv) => newPinballGame(Math.random, lv) },
-      bricks: { name: '비스킷 벽돌깨기', tab: '벽돌깨기', icon: '🧁', level: 'normal', levels: [['easiest', '입문', '하트 7개 · 아주 넓은 뒤집개 · 천천히'], ['easy', '쉬움', '하트 5개 · 넓은 뒤집개 · 느리게'], ['normal', '보통', '하트 3개 · 초코 비스킷 한 줄'], ['hard', '어려움', '하트 3개 · 좁은 뒤집개 · 빠르게'], ['expert', '달인', '하트 2개 · 초코 비스킷 세 줄 · 아주 빠르게']], make: (lv) => newBrickGame(Math.random, lv) },
-      block: { name: '젤리 블록', tab: '젤리 블록', icon: '🧩', level: 'normal', levels: [['easiest', '입문', '10×10 · 작은 조각 위주'], ['easy', '쉬움', '9×9 · 작은 조각 위주'], ['normal', '보통', '8×8'], ['hard', '어려움', '8×8 · 큰 조각 자주'], ['expert', '달인', '7×7 · 큰 조각 자주']], make: (lv) => newBlockGame(Math.random, lv) },
-      drop: { name: '마카롱 낙하', tab: '마카롱 낙하', icon: '🍬', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '10×20 · 아주 천천히 · 보관 가능'], ['easy', '쉬움', '10×20 · 천천히 · 보관 가능'], ['normal', '보통', '10×20 · 보관 가능'], ['hard', '어려움', '레벨 6부터 · 보관 없음'], ['expert', '달인', '레벨 10부터 · 보관 없음']], make: (lv) => newDropGame(Math.random, lv) },
-      snake: { name: '스네이크', icon: '🐍', level: 'normal', levels: [['easiest', '입문', '10×10 · 아주 느리게'], ['easy', '쉬움', '12×12 · 느리게'], ['normal', '보통', '15×15'], ['hard', '어려움', '18×18 · 빠르게'], ['expert', '달인', '20×20 · 아주 빠르게']], make: (lv) => newSnakeGame(Math.random, lv) },
-      recipe: { name: '딸기 우유 레시피', tab: '딸기 우유', icon: '🥛', level: 'normal', levels: [['easiest', '입문', '재료 4 · 아주 천천히'], ['easy', '쉬움', '재료 4 · 천천히'], ['normal', '보통', '재료 4'], ['hard', '어려움', '재료 6 · 빠르게'], ['expert', '달인', '재료 6 · 아주 빠르게']], make: (lv) => newRecipeGame(Math.random, lv) },
-      pop: { name: '초코칩 터뜨리기', tab: '초코칩', icon: '🍫', level: 'normal', stages: true, next: (game) => game.won || game.cleared, levels: [['easiest', '입문', '7×5 · 3색'], ['easy', '쉬움', '8×6 · 3색'], ['normal', '보통', '10×8 · 4색'], ['hard', '어려움', '12×9 · 5색'], ['expert', '달인', '12×10 · 6색']], make: (lv, s) => newPopGame(Math.random, lv, s) },
-      slide: { name: '꽃밭 퍼즐', icon: '🌸', level: 'easy', stages: true, levels: [['easiest', '입문', '3×3 · 조금 섞기'], ['easy', '쉬움', '3×3'], ['normal', '보통', '4×4'], ['hard', '어려움', '5×5'], ['expert', '달인', '6×6']], make: (lv, s) => newSlideGame(Math.random, lv, s) },
-      lights: { name: '별 밝히기', icon: '🌟', level: 'normal', stages: true, levels: [['easiest', '입문', '3×3'], ['easy', '쉬움', '4×4'], ['normal', '보통', '5×5'], ['hard', '어려움', '6×6'], ['expert', '달인', '7×7']], make: (lv, s) => newLightsGame(Math.random, lv, s) },
-      candy: { name: '캔디 크러시', tab: '캔디', icon: '🍭', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '5색 · 이동 30번'], ['easy', '쉬움', '5색 · 이동 25번'], ['normal', '보통', '6색 · 이동 20번'], ['hard', '어려움', '6색 · 이동 16번'], ['expert', '달인', '6색 · 이동 13번']], make: lv => newCandyGame(Math.random, lv) },
-      water: { name: '물 색깔 정리', tab: '물 정리', icon: '🧪', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '3색부터 · 천천히 늘어남'], ['easy', '쉬움', '3색부터 · 레벨마다 늘어남'], ['normal', '보통', '4색부터 · 레벨마다 늘어남'], ['hard', '어려움', '6색부터 · 최대 10색'], ['expert', '달인', '7색부터 · 레벨마다 한 색씩']], make: lv => newWaterSortGame(Math.random, lv) },
-      knife: { name: '칼 던지기', tab: '칼 던지기', icon: '🔪', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '아주 느리게 · 칼 4개부터'], ['easy', '쉬움', '느리게 돌아요 · 칼 5개부터'], ['normal', '보통', '칼 6개부터 · 5판마다 보스'], ['hard', '어려움', '빠르게 돌아요 · 칼 7개부터'], ['expert', '달인', '아주 빠르게 · 칼 8개부터']], make: lv => newKnifeGame(Math.random, lv) },
-      count: { name: '인원 모으기', tab: '인원 모으기', icon: '🏃', level: 'normal', ownSfx: true, stages: true, levels: [['easiest', '입문', '8명 출발 · 적 무리 아주 작게'], ['easy', '쉬움', '5명 출발 · 적 무리 작게'], ['normal', '보통', '1명 출발'], ['hard', '어려움', '1명 출발 · 나쁜 문과 적 많이'], ['expert', '달인', '1명 출발 · 큰 적 무리']], make: (lv, s) => newCountMastersGame(Math.random, lv, s) },
-      dino: { name: '공룡 달리기', tab: '공룡', icon: '🦖', level: 'normal', ownSfx: true, hidden: true, levels: [['easiest', '입문', '아주 천천히 · 최고 속도 낮게'], ['easy', '쉬움', '천천히 · 최고 속도 낮게'], ['normal', '보통', '크롬 공룡과 같은 속도'], ['hard', '어려움', '빠르게 시작 · 빨리 빨라짐'], ['expert', '달인', '아주 빠르게 · 최고 속도 높게']], make: lv => newDinoGame(Math.random, lv) },
+      mines: { name: '지뢰찾기', icon: '💣', level: 'easy', stages: true, levels: [['easiest', '입문', '10×10 · 18개'], ['easy', '쉬움', '12×12 · 30개'], ['normal', '보통', '14×14 · 43개'], ['hard', '어려움', '15×15 · 48개'], ['expert', '달인', '16×16 · 56개']], make: (lv, s) => newMineGame(Math.random, lv, s) },
+      fruits: { name: '사과 상자', icon: '🍎', level: 'normal', levels: [['easiest', '입문', '2분 · 10×8'], ['easy', '쉬움', '1분 30초 · 12×10'], ['normal', '보통', '1분 · 12×10'], ['hard', '어려움', '52초 · 13×10'], ['expert', '달인', '45초 · 14×10']], make: (lv) => newFruitGame(Math.random, lv) },
+      merge: { name: '2048', icon: '🔢', level: 'normal', levels: [['easiest', '입문', '4×4 · 2048'], ['easy', '쉬움', '3×3 · 256'], ['normal', '보통', '3×3 · 512'], ['hard', '어려움', '4×4 · 4096'], ['expert', '달인', '4×4 · 8192']], make: (lv) => new2048Game(Math.random, lv) },
+      memory: { name: '짝 맞추기', icon: '🃏', level: 'easy', stages: true, levels: [['easiest', '입문', '8쌍'], ['easy', '쉬움', '12쌍'], ['normal', '보통', '15쌍'], ['hard', '어려움', '18쌍'], ['expert', '달인', '18쌍 · 틀리면 빨리 덮여요']], make: (lv, s) => newMemoryGame(Math.random, lv, faces(), s) },
+      shop: { name: '쿠키 가게', icon: '🍪', level: 'normal', stages: true, levels: [['easiest', '입문', '목표 10,000원 · ♥4'], ['easy', '쉬움', '목표 15,000원 · 손님 급함 · ♥3'], ['normal', '보통', '목표 20,000원 · 오븐도 빨라요 · ♥3'], ['hard', '어려움', '목표 25,000원 · 더 빠른 오븐 · ♥3'], ['expert', '달인', '목표 30,000원 · 가장 빠른 오븐 · ♥2']], make: (lv, s) => newShopGame(Math.random, lv, s) },
+      pinball: { name: '디저트 핀볼', tab: '핀볼', icon: '🎱', level: 'normal', levels: [['easiest', '입문', '공 3개 · 볼 세이브 5초'], ['easy', '쉬움', '공 3개 · 세이브 없음 · 짧은 플리퍼'], ['normal', '보통', '공 3개 · 세이브 없음 · 아주 짧은 플리퍼 · 무겁게'], ['hard', '어려움', '공 3개 · 세이브 없음 · 더 짧은 플리퍼 · 아주 무겁게'], ['expert', '달인', '공 3개 · 세이브 없음 · 가장 짧은 플리퍼 · 가장 무겁게']], make: (lv) => newPinballGame(Math.random, lv) },
+      bricks: { name: '비스킷 벽돌깨기', tab: '벽돌깨기', icon: '🧁', level: 'normal', levels: [['easiest', '입문', '하트 3개 · 초코 비스킷 한 줄'], ['easy', '쉬움', '하트 3개 · 좁은 뒤집개 · 빠르게'], ['normal', '보통', '하트 2개 · 초코 비스킷 세 줄 · 아주 빠르게'], ['hard', '어려움', '하트 2개 · 초코 네 줄 · 더 좁게 · 더 빠르게'], ['expert', '달인', '하트 2개 · 초코 다섯 줄 · 가장 좁고 빠르게']], make: (lv) => newBrickGame(Math.random, lv) },
+      block: { name: '젤리 블록', tab: '젤리 블록', icon: '🧩', level: 'normal', levels: [['easiest', '입문', '8×8'], ['easy', '쉬움', '8×8 · 큰 조각 자주'], ['normal', '보통', '7×7 · 큰 조각 자주'], ['hard', '어려움', '6×6 · 큰 조각 자주'], ['expert', '달인', '6×6 · 큰 조각 아주 자주']], make: (lv) => newBlockGame(Math.random, lv) },
+      drop: { name: '마카롱 낙하', tab: '마카롱 낙하', icon: '🍬', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '10×20 · 보관 가능'], ['easy', '쉬움', '레벨 6부터 · 보관 없음'], ['normal', '보통', '레벨 10부터 · 보관 없음'], ['hard', '어려움', '레벨 14부터 · 보관 없음'], ['expert', '달인', '레벨 18부터 · 보관 없음']], make: (lv) => newDropGame(Math.random, lv) },
+      snake: { name: '스네이크', icon: '🐍', level: 'normal', levels: [['easiest', '입문', '15×15'], ['easy', '쉬움', '18×18 · 빠르게'], ['normal', '보통', '20×20 · 아주 빠르게'], ['hard', '어려움', '21×21 · 더 빠르게'], ['expert', '달인', '22×22 · 가장 빠르게']], make: (lv) => newSnakeGame(Math.random, lv) },
+      recipe: { name: '딸기 우유 레시피', tab: '딸기 우유', icon: '🥛', level: 'normal', levels: [['easiest', '입문', '재료 4'], ['easy', '쉬움', '재료 6 · 빠르게'], ['normal', '보통', '재료 6 · 아주 빠르게'], ['hard', '어려움', '재료 8 · 더 빠르게'], ['expert', '달인', '재료 8 · 가장 빠르게']], make: (lv) => newRecipeGame(Math.random, lv) },
+      pop: { name: '초코칩 터뜨리기', tab: '초코칩', icon: '🍫', level: 'normal', stages: true, next: (game) => game.won || game.cleared, levels: [['easiest', '입문', '10×8 · 4색'], ['easy', '쉬움', '12×9 · 5색'], ['normal', '보통', '12×10 · 6색'], ['hard', '어려움', '12×11 · 6색'], ['expert', '달인', '12×12 · 6색']], make: (lv, s) => newPopGame(Math.random, lv, s) },
+      slide: { name: '꽃밭 퍼즐', icon: '🌸', level: 'easy', stages: true, levels: [['easiest', '입문', '4×4'], ['easy', '쉬움', '5×5'], ['normal', '보통', '6×6'], ['hard', '어려움', '6×6 · 섞임이 더 길어요'], ['expert', '달인', '6×6 · 제자리 표시 없음']], make: (lv, s) => newSlideGame(Math.random, lv, s) },
+      lights: { name: '별 밝히기', icon: '🌟', level: 'normal', stages: true, levels: [['easiest', '입문', '5×5'], ['easy', '쉬움', '6×6'], ['normal', '보통', '7×7'], ['hard', '어려움', '8×8'], ['expert', '달인', '8×8 · 더 많이 섞임']], make: (lv, s) => newLightsGame(Math.random, lv, s) },
+      candy: { name: '캔디 크러시', tab: '캔디', icon: '🍭', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '6색 · 이동 20번'], ['easy', '쉬움', '6색 · 이동 16번'], ['normal', '보통', '6색 · 이동 13번'], ['hard', '어려움', '6색 · 이동 11번'], ['expert', '달인', '6색 · 이동 10번']], make: lv => newCandyGame(Math.random, lv) },
+      water: { name: '물 색깔 정리', tab: '물 정리', icon: '🧪', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '4색부터 · 레벨마다 늘어남'], ['easy', '쉬움', '6색부터 · 최대 10색'], ['normal', '보통', '7색부터 · 빨리 늘어남'], ['hard', '어려움', '8색부터 · 빨리 늘어남'], ['expert', '달인', '9색부터 · 최대 10색']], make: lv => newWaterSortGame(Math.random, lv) },
+      knife: { name: '칼 던지기', tab: '칼 던지기', icon: '🔪', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '칼 6개부터 · 5판마다 보스'], ['easy', '쉬움', '빠르게 돌아요 · 칼 7개부터'], ['normal', '보통', '아주 빠르게 · 칼 8개부터'], ['hard', '어려움', '더 빠르게 · 칼 9개부터'], ['expert', '달인', '가장 빠르게 · 칼 10개부터']], make: lv => newKnifeGame(Math.random, lv) },
+      count: { name: '인원 모으기', tab: '인원 모으기', icon: '🏃', level: 'normal', ownSfx: true, stages: true, levels: [['easiest', '입문', '1명 출발'], ['easy', '쉬움', '1명 출발 · 나쁜 문과 적 많이'], ['normal', '보통', '1명 출발 · 큰 적 무리'], ['hard', '어려움', '1명 출발 · 더 큰 적 무리 · 나쁜 문 대부분'], ['expert', '달인', '1명 출발 · 가장 큰 적 무리 · 거의 다 나쁜 문']], make: (lv, s) => newCountMastersGame(Math.random, lv, s) },
+      survive: { name: '젤리 생존기', tab: '생존기', icon: '🛡️', level: 'normal', ownSfx: true, levels: [['easiest', '입문', 'HP 5 · 1분마다 큰 젤리'], ['easy', '쉬움', 'HP 4 · 빨리 강해지고 많이 나와요'], ['normal', '보통', 'HP 3 · 아주 빨리 강해지고 아주 많이 나와요'], ['hard', '어려움', 'HP 2 · 더 빨리 강해지고 더 많이 나와요'], ['expert', '달인', 'HP 2 · 가장 빨리 강해지고 가장 많이 나와요']], make: lv => newSurviveGame(Math.random, lv) },
+      stairs: { name: '구름 계단', tab: '구름 계단', icon: '☁️', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '시간이 점점 빨라져요 · 꺾임 보통'], ['easy', '쉬움', '빠른 시간 · 적게 채워짐 · 꺾임 많이'], ['normal', '보통', '아주 빠른 시간 · 가장 적게 채워짐 · 계속 꺾임'], ['hard', '어려움', '더 빠른 시간 · 더 적게 채워짐 · 꺾임 68%'], ['expert', '달인', '가장 빠른 시간 · 거의 안 채워짐 · 꺾임 76%']], make: lv => newStairsGame(Math.random, lv) },
+      dino: { name: '공룡 달리기', tab: '공룡', icon: '🦖', level: 'normal', ownSfx: true, hidden: true, levels: [['easiest', '입문', '크롬 공룡과 같은 속도'], ['easy', '쉬움', '빠르게 시작 · 빨리 빨라짐'], ['normal', '보통', '아주 빠르게 · 최고 속도 높게'], ['hard', '어려움', '더 빠르게 · 최고 속도 16'], ['expert', '달인', '가장 빠르게 · 최고 속도 17']], make: lv => newDinoGame(Math.random, lv) },
+      dash: { name: '솜사탕 질주', tab: '질주', icon: '🐰', level: 'normal', ownSfx: true, hidden: true, levels: [['easiest', '입문', '천천히 달려요 · 기운이 천천히 줄어요'], ['easy', '쉬움', '조금 빨라요 · 부딪히면 기운 18%'], ['normal', '보통', '빠르게 달려요 · 부딪히면 기운 20%'], ['hard', '어려움', '더 빠르게 · 부딪히면 기운 22%'], ['expert', '달인', '가장 빠르게 · 기운이 가장 빨리 줄어요 · 부딪히면 기운 25%']], make: (lv) => newDashGame(Math.random, lv) },
     };
     const fresh = (which, stage = 1) => ({ game: GAMES[which].make(GAMES[which].level, stage), level: GAMES[which].level, stage, started: 0, stopped: 0, hints: 3, recorded: false, hideResult: false });
     const states = {};
-    let eggTaps = 0, eggLast = 0, mode = '', flagMode = false, anchor = null, pointer = null, moved = false, end = null, paintNow = null;
+    let eggTaps = 0, eggLast = 0, eggHold = 0, eggMute = 0, mode = '', flagMode = false, anchor = null, pointer = null, moved = false, end = null, paintNow = null;
     // Timers of the game on screen (the cookie oven, the recipe playback, the pinball frame); cleared when it changes or
     // closes. A game that runs on the clock pauses then (st.pause).
     let live = 0, frame = 0, timers = [], panelStopped = false;
@@ -1568,9 +1803,12 @@
       content.dataset.kind = mode;
       const head = el('div', 'gfx-game-head'), title = el('b', 'gfx-game-title'), stats = el('div', 'gfx-game-stats');
       const titleIcon = el('i', '', g.icon); titleIcon.setAttribute('aria-hidden', 'true');
-      // Easter egg: tap a game's icon five times quickly for the hidden offline T-Rex.
+      // Easter eggs: tap a game's icon five times quickly for the hidden offline T-Rex; press and hold it for 1.2 s for the runner.
+      clearTimeout(eggHold);
+      on(titleIcon, 'pointerdown', () => { clearTimeout(eggHold); eggHold = setTimeout(() => { eggHold = 0; if (mode === 'dash') return; eggTaps = 0; eggMute = performance.now() + 700; sfx.play('level'); show('dash'); }, 1200); });
+      for (const t of ['pointerup', 'pointerleave', 'pointercancel']) on(titleIcon, t, () => { clearTimeout(eggHold); eggHold = 0; });
       on(titleIcon, 'click', () => {
-        const now = performance.now(); eggTaps = now - eggLast < 600 ? eggTaps + 1 : 1; eggLast = now;
+        const now = performance.now(); if (now < eggMute) return; eggTaps = now - eggLast < 600 ? eggTaps + 1 : 1; eggLast = now;
         if (eggTaps >= 5 && mode !== 'dino') { eggTaps = 0; sfx.play('level'); show('dino'); }
       });
       title.append(titleIcon, el('span', '', g.name));
@@ -1781,7 +2019,7 @@
             if (busy) return;
             begin();
             const r = game.flip(i);
-            if (r === 'miss') { busy = setTimeout(() => { busy = 0; game.hide(); paint(); }, 800); }
+            if (r === 'miss') { busy = setTimeout(() => { busy = 0; game.hide(); paint(); }, game.peek); }
             paint();
           });
           b.dataset.cell = String(i); board.append(b);
@@ -2490,9 +2728,9 @@
       }
 
       if (mode === 'recipe') {
-        const NAMES = ['딸기', '우유', '설탕', '얼음', '연유', '생크림'];
-        board.style.setProperty('--cols', String(game.pads > 4 ? 3 : 2));
-        board.style.setProperty('--fit', game.pads > 4 ? '1.5' : '1');
+        const NAMES = ['딸기', '우유', '설탕', '얼음', '연유', '생크림', '시럽', '바닐라'];
+        board.style.setProperty('--cols', String(game.pads > 6 ? 4 : game.pads > 4 ? 3 : 2));
+        board.style.setProperty('--fit', game.pads > 6 ? '2' : game.pads > 4 ? '1.5' : '1');
         let playing = false;
         const pads = Array.from({ length: game.pads }, (_, i) => {
           const b = button(NAMES[i], () => {
@@ -2553,7 +2791,7 @@
           if (clockOnly) return;
           if (game.ended) finish(true, game.moves);
           info.textContent = game.ended ? '꽃밭 완성!' : '빈칸 옆 조각을 눌러 1부터 순서대로 맞추세요';
-          cells.forEach((b, i) => { const v = game.cells[i]; b.textContent = v ? String(v) : ''; b.dataset.blank = String(!v); b.dataset.home = String(!!v && v === i + 1); b.disabled = game.ended || !v; b.setAttribute('aria-label', v ? v + '번 조각' : '빈칸'); });
+          cells.forEach((b, i) => { const v = game.cells[i]; b.textContent = v ? String(v) : ''; b.dataset.blank = String(!v); b.dataset.home = String(!!v && v === i + 1 && !game.blind); b.disabled = game.ended || !v; b.setAttribute('aria-label', v ? v + '번 조각' : '빈칸'); });
           if (game.ended) showResult('꽃밭 완성!', game.moves + '번 · ' + clock(elapsed()));
         };
       }
@@ -2570,10 +2808,10 @@
           if (game.ended) showResult('모든 별 반짝!', game.moves + '번 만에');
         };
       }
-      if (['dino', 'water', 'candy', 'knife', 'count'].includes(mode)) {
+      if (['dino', 'dash', 'water', 'candy', 'knife', 'count', 'survive', 'stairs'].includes(mode)) {
         const kind = mode;
-        const [W, H] = ({ dino: [600, 170], water: [360, 380], candy: [360, 452], knife: [360, 520], count: [360, 560] })[kind];
-        board.style.setProperty('--fit', String(W / (H + (kind === 'dino' ? 70 : kind === 'water' ? 56 : 0))));
+        const [W, H] = ({ dino: [600, 170], dash: [640, 240], water: [360, 380], candy: [360, 452], knife: [360, 520], count: [360, 560], survive: [360, 520], stairs: [360, 520] })[kind];
+        board.style.setProperty('--fit', String(W / (H + (kind === 'dino' || kind === 'dash' ? 70 : kind === 'water' || kind === 'stairs' ? 56 : 0))));
         const canvas = el('canvas', 'gfx-arcade-canvas'), ctx = canvas.getContext('2d');
         canvas.style.aspectRatio = W + '/' + H;
         canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', g.name + ' 게임 화면');
@@ -2584,7 +2822,7 @@
         const inputLife = new AbortController();
         let paintExtra = () => {}, release = () => {}, drawGame = () => {}, onStep = () => {}, sign = () => '', keyDown = () => {}, keyUp = () => {};
         st.pause = () => { release(); inputLife.abort(); };
-        const KEYS = [' ', 'enter', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'];
+        const KEYS = [' ', 'enter', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', '1', '2', '3'];
         on(board, 'keydown', e => { const k = e.key.toLowerCase(); if (!KEYS.includes(k)) return; e.preventDefault(); keyDown(k, e.repeat); });
         on(board, 'keyup', e => { const k = e.key.toLowerCase(); if (KEYS.includes(k)) keyUp(k); });
         on(board, 'blur', () => release());
@@ -2634,6 +2872,13 @@
         };
         const ease = p => p < 0 ? 0 : p > 1 ? 1 : p * p * (3 - 2 * p);
         const lerp = (a, b, p) => a + (b - a) * p;
+        // A button in a pad that stays down while held (the runners' jump and duck/slide).
+        const hold = (text, down, up) => {
+          const b = button(text, () => {});
+          on(b, 'pointerdown', e => { e.preventDefault(); b.setPointerCapture?.(e.pointerId); b.dataset.held = ''; down(); focus(); });
+          for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) on(b, ev, () => { delete b.dataset.held; up(); });
+          return b;
+        };
 
         if (kind === 'dino') {
           // Chrome's offline T-Rex: grey pixel sprites on white, the colours swap every 700 points.
@@ -2650,12 +2895,6 @@
           const pad = el('div', 'gfx-arcade-pad'); board.append(pad);
           const restart = () => { if (performance.now() - endedWall > 450) renew(); };
           const press = () => { if (game.ended) return restart(); if (game.jump()) { begin(); sfx.play('tap'); } focus(); };
-          const hold = (text, down, up) => {
-            const b = button(text, () => {});
-            on(b, 'pointerdown', e => { e.preventDefault(); b.setPointerCapture?.(e.pointerId); b.dataset.held = ''; down(); focus(); });
-            for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) on(b, ev, () => { delete b.dataset.held; up(); });
-            return b;
-          };
           pad.append(hold('▲ 점프', press, () => game.release()), hold('▼ 숙이기', () => { if (!game.ended) { game.duck(true); begin(); } }, () => game.duck(false)));
           on(canvas, 'pointerdown', e => { e.preventDefault(); press(); });
           for (const ev of ['pointerup', 'pointercancel']) on(canvas, ev, () => game.release());
@@ -2725,6 +2964,103 @@
               label('G A M E   O V E R', W / 2, 58, 16, ink, 'center', 'bold 16px "Courier New", monospace');
               ctx.strokeStyle = ink; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(W / 2, 94, 11, -0.4 * Math.PI, 1.35 * Math.PI); ctx.stroke();
               ctx.fillStyle = ink; ctx.beginPath(); ctx.moveTo(W / 2 + 3, 79); ctx.lineTo(W / 2 + 12, 85); ctx.lineTo(W / 2 + 2, 89); ctx.fill();
+            }
+          };
+        } else if (kind === 'dash') {
+          // 솜사탕 질주: a pastel bunny on a candy road; flat colours and the theme's thick outline, like the other arcades.
+          const GROUND = game.GROUND, BAR = game.BAR, PINK = '#F8B9D4', SWEET = ['#F58CC0', '#7AD3E0', '#FFD447'];
+          let endedWall = 0, lastCandy = -9, lastBottle = -9, lastHit = -9, endSeen = false, slider = null;
+          const pad = el('div', 'gfx-arcade-pad'); board.append(pad);
+          const restart = () => { if (performance.now() - endedWall > 450) renew(); };
+          const press = () => { if (game.ended) return restart(); begin(); if (game.jump()) sfx.play(game.jumps > 1 ? 'move' : 'tap'); focus(); };
+          const dive = held => { if (game.ended) return; game.slide(held); if (held) begin(); };
+          pad.append(hold('▲ 점프', press, () => {}), hold('▼ 슬라이드', () => dive(true), () => dive(false)));
+          // The canvas: the left half slides while pressed, the right half jumps.
+          on(canvas, 'pointerdown', e => {
+            e.preventDefault(); try { canvas.setPointerCapture(e.pointerId); } catch {}
+            if (game.ended) return restart();
+            if (toWorld(e).x < W / 2) { slider = e.pointerId; dive(true); focus(); } else press();
+          });
+          for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) on(canvas, ev, e => { if (e.pointerId === slider) { slider = null; game.slide(false); } });
+          release = () => { slider = null; game.slide(false); };
+          keyDown = (k, repeat) => { if (k === 'arrowdown' || k === 's') dive(true); else if ([' ', 'enter', 'arrowup', 'w'].includes(k) && !repeat) press(); };
+          keyUp = k => { if (k === 'arrowdown' || k === 's') game.slide(false); };
+          onStep = dt => {
+            game.step(dt);
+            if (game.candyAt !== lastCandy) { lastCandy = game.candyAt; sfx.play('coin'); }
+            if (game.bottleAt !== lastBottle) { lastBottle = game.bottleAt; sfx.play('level'); }
+            if (game.hitAt !== lastHit) { lastHit = game.hitAt; sfx.play('hurt'); navigator.vibrate?.(30); }
+            if (game.ended && !endSeen) { endSeen = true; endedWall = performance.now(); sfx.play('lose'); navigator.vibrate?.(60); finish(false, game.score); }
+          };
+          sign = () => [game.score, game.candies, game.started, game.ended && game.time - game.fail.t > 0.9].join('/');
+          // The bunny: a round pastel blob with long ears; it squashes flat to slide and blinks while it is safe after a bump.
+          const bunny = () => {
+            const t = tone(), line = css(t.line), air = game.y > 0, flat = game.sliding && !air, run = game.started && !game.ended && !air;
+            if (game.hurt > 0 && Math.floor(game.hurt * 12) % 2 === 0) return;
+            const fall = game.ended && game.fail.why === 'pit' ? game.time - game.fail.t : 0;
+            ctx.save(); ctx.translate(game.x, GROUND - game.y - (run && !flat ? Math.abs(Math.sin(game.distance / 22)) * 3 : 0) + 420 * fall * fall);
+            if (fall) ctx.rotate(fall * 3);
+            const lean = air ? Math.max(-0.5, Math.min(0.4, -game.vy / 1500)) : 0;
+            // Ears first, so the head covers their roots.
+            for (const [ex, er] of flat ? [[-22, -1.35], [-16, -1.45]] : [[-6, -0.25 + lean], [6, 0.2 + lean]]) {
+              ctx.save(); ctx.translate(ex, flat ? -16 : -38); ctx.rotate(flat ? er : er + (run ? Math.sin(game.distance / 30 + ex) * 0.12 : 0));
+              ctx.beginPath(); ctx.ellipse(0, flat ? -4 : -10, 5, 13, 0, 0, Math.PI * 2); ink2(PINK, 2.5);
+              ctx.beginPath(); ctx.ellipse(0, flat ? -4 : -9, 2, 8, 0, 0, Math.PI * 2); ctx.fillStyle = '#F58CC0'; ctx.fill(); ctx.restore();
+            }
+            disc(flat ? -26 : -17, flat ? -9 : -13, 6, '#ffffff'); ctx.beginPath(); ctx.arc(flat ? -26 : -17, flat ? -9 : -13, 6, 0, Math.PI * 2); ctx.lineWidth = 2.5; ctx.strokeStyle = line; ctx.stroke();
+            ctx.beginPath(); ctx.ellipse(0, flat ? -11 : -22, flat ? 24 : 17, flat ? 11 : 20, 0, 0, Math.PI * 2); ink2(PINK, 3);
+            ctx.beginPath(); ctx.ellipse(flat ? 3 : 2, flat ? -7 : -14, flat ? 15 : 9, flat ? 5 : 10, 0, 0, Math.PI * 2); ctx.fillStyle = '#FFE9F2'; ctx.fill();
+            const ex = flat ? 12 : 7, ey = flat ? -14 : -29;
+            if (game.ended) { label('×', ex, ey, 14, line); } else { disc(ex, ey, 2.6, line); disc(ex + 1, ey - 1, 0.9, '#ffffff'); }
+            disc(ex + 5, ey + 6, 3.2, '#F58CC0');
+            if (!flat) for (const s of [-1, 1]) { const step = run ? Math.sin(game.distance / 16) * 5 * s : 0; ctx.beginPath(); ctx.ellipse(s * 7 + step, -1.5, 5, 3, 0, 0, Math.PI * 2); ink2(PINK, 2); }
+            ctx.restore();
+          };
+          drawGame = () => {
+            const t = tone(), line = css(t.line), d = game.distance;
+            fill(0, 0, W, H, css(t.ink, [191, 230, 255, 1], t.night ? 0.85 : 0.45));
+            // Far hills and puffs of cotton drift slower than the road.
+            for (let i = 0; i < 4; i++) { const x = ((i * 230 - d * 0.12) % 920 + 920) % 920 - 140; ctx.beginPath(); ctx.ellipse(x, GROUND, 120, 54 + (i % 2) * 18, 0, Math.PI, 0); ctx.fillStyle = css(t.card, [200, 226, 255, 1], 0.45); ctx.fill(); }
+            for (const [cx, cy, sc] of [[80, 50, 1], [330, 34, 0.8], [560, 64, 1.1], [820, 40, 0.9]]) {
+              const x = ((cx - d * 0.25) % 900 + 900) % 900 - 120;
+              for (const [dx, dy, r] of [[0, 0, 16], [18, 4, 12], [-18, 5, 11], [4, 8, 13]]) disc(x + dx * sc, cy + dy * sc, r * sc, css(t.card, null, 1, 0.7));
+            }
+            // The road: a minty top over a darker base, with holes where the pits are.
+            fill(0, GROUND, W, H - GROUND, css(t.line, t.ink, 0.28));
+            fill(0, GROUND, W, 9, '#9BE3C2'); fill(0, GROUND - 2, W, 3, line);
+            for (let i = 0; i < 14; i++) { const x = ((i * 53 - d) % 742 + 742) % 742 - 60; fill(x, GROUND + 22 + (i % 3) * 8, 14, 4, css(t.line, t.ink, 0.45)); }
+            for (const o of game.obstacles) if (o.kind === 'pit') { fill(o.x, GROUND - 4, o.w, H - GROUND + 4, css(t.line, t.ink, 0.8)); fill(o.x - 2, GROUND - 4, 3, H - GROUND + 4, line); fill(o.x + o.w - 1, GROUND - 4, 3, H - GROUND + 4, line); }
+            for (const o of game.obstacles) {
+              if (o.kind === 'low') {
+                ctx.beginPath(); ctx.roundRect(o.x, GROUND - o.h, o.w, o.h, 9); ink2('#FFB27A', 3);
+                fill(o.x + 6, GROUND - o.h + 6, o.w - 12, 3, 'rgba(255,255,255,.7)');
+              } else if (o.kind === 'bar') {
+                // A candy stick hanging from above: red with white stripes.
+                const bottom = GROUND - BAR; ctx.save(); ctx.beginPath(); ctx.roundRect(o.x, -14, o.w, bottom + 14, 10); ctx.fillStyle = '#F2606B'; ctx.fill(); ctx.clip();
+                for (let y = 0; y < bottom; y += 22) fill(o.x, y, o.w, 9, 'rgba(255,255,255,.85)');
+                ctx.restore(); ctx.beginPath(); ctx.roundRect(o.x, -14, o.w, bottom + 14, 10); ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.strokeStyle = line; ctx.stroke();
+              }
+            }
+            for (const it of game.items) {
+              const bob = Math.sin(game.time * 5 + it.x * 0.05) * 2.5, x = it.x, y = GROUND - it.y + bob;
+              if (it.kind === 'milk') {
+                ctx.beginPath(); ctx.roundRect(x - 7, y - 12, 14, 24, 4); ink2('#ffffff', 2.5); fill(x - 5, y - 2, 10, 8, '#8FD0F2'); ctx.beginPath(); ctx.roundRect(x - 5, y - 17, 10, 6, 2); ink2('#F58CC0', 2);
+              } else {
+                const c = SWEET[Math.round(it.y / 10) % 3];
+                for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + s * 6, y); ctx.lineTo(x + s * 13, y - 5); ctx.lineTo(x + s * 13, y + 5); ctx.closePath(); ink2(c, 1.8); }
+                ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ink2(c, 2); disc(x - 2, y - 2, 1.8, 'rgba(255,255,255,.8)');
+              }
+            }
+            bunny();
+            // Energy bar and score.
+            ctx.beginPath(); ctx.roundRect(16, 12, 230, 18, 9); ink2(css(t.card), 2.5);
+            if (game.energy > 0) { ctx.beginPath(); ctx.roundRect(16, 12, Math.max(18, 230 * game.energy), 18, 9); ink2(game.energy < 0.25 ? '#F2606B' : css(t.accent), 2.5); }
+            label('🥛', 262, 22, 18, line);
+            ctx.font = font(30); ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'; ctx.lineWidth = 7; ctx.strokeStyle = line; ctx.strokeText(String(game.score), W - 16, 28); ctx.fillStyle = '#ffffff'; ctx.fillText(String(game.score), W - 16, 28);
+            if (!game.started) {
+              card(130, 78, W - 260, 78, 20, css(t.card), 4);
+              label('오른쪽 탭 · 스페이스 · ↑ 점프 (공중에서 한 번 더)', W / 2, 106, 16, css(t.text));
+              label('왼쪽 탭 · ↓ 꾹 눌러 슬라이드', W / 2, 132, 15, css(t.text, null, 1, 0.75));
             }
           };
         } else if (kind === 'water') {
@@ -3146,6 +3482,174 @@
             if (!game.started) { card(CX - 92, 366, 184, 30, 15, css(t.card), 3); label('탭해서 칼을 던지세요', CX, 381, 15, css(t.text)); }
             ctx.restore();
           };
+        } else if (kind === 'survive') {
+          // Jelly Survivors: drag anywhere to steer (a floating stick with a dead zone) or use WASD/arrows; the hero shoots by itself.
+          const FOES = ['#F2606B', '#A47CF0', '#4FC487', '#FF9A3D'];
+          const held = new Set();
+          let stick = null, lastHp = game.hp, lastKills = 0, lastGem = -9, lastLevel = -9, endSeen = false;
+          const CARD = i => ({ x: 24, y: 142 + i * 108, w: W - 48, h: 96 });
+          const steer = () => {
+            if (stick) return;
+            game.aim((held.has('arrowright') || held.has('d') ? 1 : 0) - (held.has('arrowleft') || held.has('a') ? 1 : 0), (held.has('arrowdown') || held.has('s') ? 1 : 0) - (held.has('arrowup') || held.has('w') ? 1 : 0));
+          };
+          const choose = i => { if (game.pick(i)) { sfx.play('level'); stick = null; steer(); } };
+          on(canvas, 'pointerdown', e => {
+            e.preventDefault(); focus();
+            const p = toWorld(e);
+            if (game.choices) { const i = game.choices.findIndex((_, k) => { const c = CARD(k); return p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h; }); if (i >= 0) choose(i); return; }
+            canvas.setPointerCapture?.(e.pointerId);
+            stick = { id: e.pointerId, ax: p.x, ay: p.y, x: p.x, y: p.y }; game.start(); begin();
+          });
+          on(canvas, 'pointermove', e => {
+            if (!stick || stick.id !== e.pointerId) return;
+            const p = toWorld(e), dx = p.x - stick.ax, dy = p.y - stick.ay, m = Math.hypot(dx, dy);
+            stick.x = p.x; stick.y = p.y;
+            // Inside 8 px nothing moves; full speed from 36 px.
+            const k = m < 8 ? 0 : Math.min(1, (m - 8) / 28) / m;
+            game.aim(dx * k, dy * k);
+          });
+          for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) on(canvas, ev, e => { if (stick && stick.id === e.pointerId) { stick = null; steer(); } });
+          keyDown = k => { if (['1', '2', '3'].includes(k)) return choose(+k - 1); held.add(k); game.start(); begin(); steer(); };
+          keyUp = k => { held.delete(k); steer(); };
+          release = () => { held.clear(); stick = null; game.aim(0, 0); };
+          onStep = dt => {
+            game.step(dt);
+            if (game.hp < lastHp) { sfx.play('hurt'); navigator.vibrate?.(20); }
+            lastHp = game.hp;
+            if (game.kills !== lastKills) { lastKills = game.kills; sfx.play('pop', 1); }
+            if (game.gemAt !== lastGem) { lastGem = game.gemAt; sfx.play('coin'); }
+            if (game.levelAt !== lastLevel) { if (lastLevel > -9) sfx.play('clear', 1); lastLevel = game.levelAt; }
+            if (game.ended && !endSeen) { endSeen = true; sfx.play('lose'); navigator.vibrate?.(60); finish(false, game.score); }
+          };
+          sign = () => [Math.floor(game.time), game.kills, game.hp, game.level, !!game.choices, game.started, game.ended && game.over > 0.8].join('/');
+          // A jelly blob: outlined, with two eyes.
+          const blob = (x, y, r, color, sy = 1) => {
+            ctx.beginPath(); ctx.ellipse(x, y, r * (2 - sy), r * sy, 0, 0, Math.PI * 2); ink2(color, 2);
+            disc(x - r * 0.35, y - r * 0.15, r * 0.22, '#ffffff'); disc(x + r * 0.35, y - r * 0.15, r * 0.22, '#ffffff');
+            disc(x - r * 0.32, y - r * 0.12, r * 0.1, css(tone().line)); disc(x + r * 0.38, y - r * 0.12, r * 0.1, css(tone().line));
+          };
+          const outlined = (text, x, y, size, color) => {
+            ctx.font = font(size); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+            ctx.lineWidth = Math.max(2, size * 0.2); ctx.strokeStyle = css(tone().line); ctx.strokeText(text, x, y); ctx.fillStyle = color; ctx.fillText(text, x, y);
+          };
+          drawGame = () => {
+            const t = tone(), h = game.hero;
+            ground();
+            ctx.beginPath(); ctx.arc(h.x, h.y, game.pickup, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = css(t.line, null, 1, 0.12); ctx.stroke();
+            for (const g of game.gems) { ctx.save(); ctx.translate(g.x, g.y); ctx.rotate(Math.PI / 4); ctx.beginPath(); ctx.rect(-3.5 - (g.v > 1), -3.5 - (g.v > 1), 7 + 2 * (g.v > 1), 7 + 2 * (g.v > 1)); ink2(g.v > 1 ? '#F58CC0' : '#62D3DE', 1.6); ctx.restore(); }
+            for (const e of game.enemies) {
+              const wob = 1 + 0.08 * Math.sin(game.time * 9 + e.x * 0.1);
+              blob(e.x, e.y, e.r, e.hit > 0 ? '#ffffff' : FOES[e.kind], wob);
+              if (e.big) { const w = 34; ctx.beginPath(); ctx.roundRect(e.x - w / 2, e.y - e.r - 12, w, 6, 3); ink2(css(t.card), 1.5); if (e.hp > 0) { ctx.beginPath(); ctx.roundRect(e.x - w / 2, e.y - e.r - 12, Math.max(4, w * e.hp / e.max), 6, 3); ink2('#E5484D', 1.5); } }
+            }
+            for (const b of game.bullets) { ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI * 2); ink2('#FFD447', 1.6); }
+            if (game.ended) ctx.globalAlpha = Math.max(0.15, 1 - game.over * 1.5);
+            else if (game.invuln > 0 && Math.floor(game.time * 14) % 2) ctx.globalAlpha = 0.45;
+            blob(h.x, h.y, h.r + 2, '#5AA9F0', 1 + 0.06 * Math.sin(game.time * 8));
+            ctx.globalAlpha = 1;
+            for (let k = 0; k < game.orbit; k++) {
+              const a = game.spin + k * Math.PI * 2 / game.orbit, x = h.x + Math.cos(a) * 40, y = h.y + Math.sin(a) * 40;
+              ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ink2('#F58CC0', 2);
+              ctx.beginPath(); ctx.arc(x, y, 3.5, a, a + 4); ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+            }
+            // Level bar, then hearts, time and level.
+            ctx.beginPath(); ctx.roundRect(10, 10, W - 20, 14, 7); ink2(css(t.card), 2);
+            if (game.xp > 0) { ctx.beginPath(); ctx.roundRect(10, 10, Math.max(14, (W - 20) * game.xp / game.need), 14, 7); ink2('#62D3DE', 2); }
+            card(10, 32, 92, 30, 15, css(t.card), 3); label('❤ ' + game.hp + '/' + game.maxHp, 56, 48, 16, css(t.text));
+            card(W / 2 - 40, 32, 80, 30, 15, css(t.card), 3); label(clock(game.time * 1000), W / 2, 48, 16, css(t.text));
+            card(W - 102, 32, 92, 30, 15, css(t.card), 3); label('Lv ' + game.level, W - 56, 48, 16, css(t.text));
+            if (game.time - game.bigAt < 1.6 && !game.ended) outlined('큰 젤리 등장!', W / 2, 96, 28, '#FFD447');
+            if (stick) {
+              const dx = stick.x - stick.ax, dy = stick.y - stick.ay, m = Math.min(34, Math.hypot(dx, dy)), a = Math.atan2(dy, dx);
+              ctx.beginPath(); ctx.arc(stick.ax, stick.ay, 36, 0, Math.PI * 2); ctx.lineWidth = 3; ctx.strokeStyle = css(t.line, null, 1, 0.35); ctx.stroke();
+              disc(stick.ax + Math.cos(a) * m, stick.ay + Math.sin(a) * m, 14, css(t.accent, null, 1, 0.7));
+            }
+            if (!game.started) {
+              card(28, H - 150, W - 56, 76, 20, css(t.card), 4);
+              label('화면을 끌어서 움직여요', W / 2, H - 123, 18, css(t.text));
+              label('공격은 자동 · 반짝이를 모아 레벨 업', W / 2, H - 97, 13, css(t.text, null, 1, 0.75));
+            }
+            if (game.choices) {
+              fill(0, 0, W, H, css(t.ink, null, 1, 0.78));
+              outlined('레벨 업!', W / 2, 78, 34, '#FFD447');
+              label('카드를 누르거나 1·2·3 키', W / 2, 114, 15, css(t.text, null, 1, 0.8));
+              game.choices.forEach((c, i) => {
+                const r = CARD(i);
+                card(r.x, r.y, r.w, r.h, 20, css(t.card), 4);
+                ctx.beginPath(); ctx.arc(r.x + 28, r.y + 48, 15, 0, Math.PI * 2); ink2(css(t.pick), 2); label(String(i + 1), r.x + 28, r.y + 49, 17, css(t.text));
+                label(c.icon, r.x + 76, r.y + 48, 34, css(t.text));
+                label(c.name, r.x + 108, r.y + 36, 22, css(t.text), 'left'); label(c.desc, r.x + 108, r.y + 66, 15, css(t.text, null, 1, 0.8), 'left');
+              });
+            }
+          };
+        } else if (kind === 'stairs') {
+          // Cloud Stairs: the camera follows the climber up a zigzag of cloud blocks; the hero stays at one spot on screen.
+          const HX = 180, HY = 350, DX = 52, DY = 40;
+          let vis = 0, lastCoin = -9, endSeen = false;
+          const act = turn => {
+            if (game.ended) return;
+            const ok = turn ? game.turn() : game.climb();
+            begin(); if (ok) sfx.play(turn ? 'move' : 'tap'); focus();
+          };
+          on(canvas, 'pointerdown', e => { e.preventDefault(); act(toWorld(e).x >= W / 2); });
+          keyDown = (k, repeat) => { if (repeat) return; if (['arrowleft', 'a', ' ', 'enter'].includes(k)) act(false); else if (['arrowright', 'd'].includes(k)) act(true); };
+          // Two big buttons in a bar under the sky.
+          const bar = el('div', 'gfx-arcade-pad');
+          const key = (text, turn) => {
+            const b = button(text, () => {});
+            on(b, 'pointerdown', e => { e.preventDefault(); b.dataset.held = ''; act(turn); });
+            on(b, 'click', e => { if (e.detail === 0) act(turn); });
+            for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) on(b, ev, () => { delete b.dataset.held; });
+            return b;
+          };
+          bar.append(key('⬆ 오르기', false), key('↩ 방향 바꾸기', true)); board.append(bar);
+          onStep = dt => {
+            game.step(dt); vis += (game.n - vis) * Math.min(1, dt / 1000 * 16);
+            if (game.coinAt !== lastCoin) { lastCoin = game.coinAt; if (game.coins) sfx.play('coin'); }
+            if (game.ended && !endSeen) { endSeen = true; sfx.play('lose'); navigator.vibrate?.(60); finish(false, game.score); }
+          };
+          sign = () => [game.n, game.coins, game.started, game.ended && game.clock - game.fail.t > 0.8].join('/');
+          // A cloud: one outline round the union of a pill and two puffs (outline pass, then fill pass on top).
+          const cloud = (x, y, w, color) => {
+            const shape = () => { ctx.beginPath(); ctx.roundRect(x - w / 2, y - 2, w, 20, 10); for (const [dx, dy, r] of [[-w * 0.2, -2, 9], [w * 0.12, -4, 12]]) { ctx.moveTo(x + dx + r, y + dy); ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2); } };
+            shape(); ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.strokeStyle = css(tone().line); ctx.stroke(); ctx.fillStyle = color; ctx.fill();
+            shape(); ctx.fill();
+          };
+          drawGame = () => {
+            const t = tone(), line = css(t.line);
+            fill(0, 0, W, H, css(t.ink, [191, 230, 255, 1], t.night ? 0.85 : 0.45));
+            for (const [cx, cy, s] of [[60, 70, 1], [290, 180, 0.8], [120, 300, 0.7], [310, 420, 1.1], [40, 470, 0.9]]) {
+              const y = ((cy + vis * 14 * s) % (H + 80) + H + 80) % (H + 80) - 40;
+              ctx.beginPath(); ctx.ellipse(cx, y, 34 * s, 11 * s, 0, 0, Math.PI * 2); ctx.fillStyle = css(t.card, null, 1, 0.55); ctx.fill();
+            }
+            // Where the camera is, between two steps.
+            const fl = Math.floor(vis), fr = vis - fl, camX = game.colAt(fl) + (game.colAt(fl + 1) - game.colAt(fl)) * fr;
+            const fall = game.ended ? game.clock - game.fail.t : 0;
+            for (let i = game.n + 9; i >= Math.max(0, game.n - 5); i--) {
+              const x = HX + (game.colAt(i) - camX) * DX, y = HY - (i - vis) * DY;
+              if (y < -30 || y > H + 30) continue;
+              ctx.globalAlpha = i < vis - 3 ? 0.4 : 1;
+              cloud(x, y, i ? 62 : 84, i === game.n ? css(t.card) : css(t.card, [200, 226, 255, 1], 0.8));
+              if (game.hasCoin(i) && i > game.n) { ctx.beginPath(); ctx.arc(x, y - 22, 7, 0, Math.PI * 2); ink2('#FFD447', 2); ctx.beginPath(); ctx.arc(x, y - 22, 3.5, 0, Math.PI * 2); ctx.lineWidth = 1.5; ctx.strokeStyle = line; ctx.stroke(); }
+              ctx.globalAlpha = 1;
+            }
+            // The climber: a round jelly that hops, squashes on landing and looks the way it faces.
+            const hop = Math.sin(Math.PI * Math.min(1, game.n - vis)) * 14, land = game.clock - game.climbAt < 0.1 ? 0.88 : 1;
+            ctx.save();
+            if (game.ended) { ctx.translate(HX + game.fail.dir * 70 * fall, HY - 18 + 520 * fall * fall); ctx.rotate(game.fail.dir * fall * 5); } else ctx.translate(HX, HY - 18 - hop);
+            ctx.beginPath(); ctx.ellipse(0, 0, 14 * (2 - land), 14 * land, 0, 0, Math.PI * 2); ink2('#F58CC0', 2.5);
+            for (const s of [-1, 1]) { disc(s * 5 + game.face * 3, -3, 3.8, '#ffffff'); disc(s * 5 + game.face * 4.6, -3, 1.7, line); }
+            ctx.restore();
+            // Time bar and score.
+            ctx.beginPath(); ctx.roundRect(20, 14, W - 40, 16, 8); ink2(css(t.card), 2);
+            if (game.left > 0) { ctx.beginPath(); ctx.roundRect(20, 14, Math.max(16, (W - 40) * game.left), 16, 8); ink2(game.left < 0.3 ? '#F2606B' : css(t.accent), 2); }
+            ctx.font = font(44); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'; ctx.lineWidth = 8; ctx.strokeStyle = line; ctx.strokeText(String(game.score), W / 2, 76); ctx.fillStyle = '#ffffff'; ctx.fillText(String(game.score), W / 2, 76);
+            if (!game.started) {
+              card(28, H - 130, W - 56, 76, 20, css(t.card), 4);
+              label('왼쪽 탭 · 오르기', W / 2, H - 104, 17, css(t.text));
+              label('오른쪽 탭 · 방향 바꾸기 후 오르기', W / 2, H - 78, 14, css(t.text, null, 1, 0.75));
+            }
+          };
         } else {
           // Count Masters: blue jelly runners on a cream road over a pastel sea; blue gates add, red ones take; then the
           // bonus stairs. Flat colours with the theme's outline, like the other games.
@@ -3292,10 +3796,22 @@
           if (kind === 'water' || kind === 'candy') return paintExtra();
           const b0 = best();
           if (kind === 'dino') { chips([b0 != null && ['🏆 ' + b0.toLocaleString()]]); info.textContent = '탭·스페이스로 점프(길게 누르면 높이) · ↓나 숙이기로 새를 피해요'; }
-          else if (kind === 'knife') {
+          else if (kind === 'dash') {
+            chips([['⭐ ' + game.score], ['🍬 ' + game.candies], b0 != null && ['🏆 ' + b0.toLocaleString()]]);
+            info.textContent = '오른쪽 탭·스페이스·↑·W 점프(공중에서 한 번 더) · 왼쪽 탭·↓·S 꾹 눌러 슬라이드 · 🥛로 기운을 채워요';
+            if (game.ended && game.time - game.fail.t > 0.9) showResult(game.fail.why === 'pit' ? '구덩이에 빠졌어요' : '기운이 다 떨어졌어요', game.score.toLocaleString() + '점 · 사탕 ' + game.candies + ' · ' + game.metres + 'm');
+          } else if (kind === 'knife') {
             chips([['⭐ ' + game.score], ['🍎 ' + game.apples], b0 != null && ['🏆 ' + b0]]);
             info.textContent = '탭·스페이스로 칼 던지기 · 꽂힌 칼에 닿으면 끝 · 사과를 맞혀 보세요';
             if (game.ended && game.time - game.fail.t > 0.9) showResult('칼이 튕겨 나갔어요', '점수 ' + game.score + ' · 스테이지 ' + game.stage + ' · 사과 ' + game.apples);
+          } else if (kind === 'survive') {
+            chips([['⭐ ' + game.score], ['❤ ' + game.hp + '/' + game.maxHp], b0 != null && ['🏆 ' + b0.toLocaleString()]]);
+            info.textContent = '화면을 끌거나 WASD·방향키로 이동 · 공격은 자동 · 레벨 업 카드는 탭이나 1·2·3';
+            if (game.ended && game.over > 0.8) showResult('젤리가 녹아 버렸어요', clock(game.time * 1000) + ' 생존 · 처치 ' + game.kills + ' · ' + game.score.toLocaleString() + '점');
+          } else if (kind === 'stairs') {
+            chips([['☁️ ' + game.score + '칸'], ['🪙 ' + game.coins], b0 != null && ['🏆 ' + b0]]);
+            info.textContent = '왼쪽 탭·←·A·스페이스는 오르기, 오른쪽 탭·→·D는 방향 바꾸기 · 시간 막대가 비기 전에 올라가요';
+            if (game.ended && game.clock - game.fail.t > 0.8) showResult(game.fail.why === 'time' ? '시간이 다 됐어요' : '구름을 헛디뎠어요', game.score + '칸 · 코인 ' + game.coins);
           } else {
             chips([['👥 ' + game.count], b0 != null && ['🏆 ' + b0.toLocaleString()]]);
             info.textContent = '좌우로 끌거나 ←→로 이동 · 파란 문으로 인원을 늘리고 장애물과 적 무리를 넘어 계단으로';
@@ -3323,7 +3839,7 @@
       paintNow = (clockOnly) => { if (!content.contains(board)) return; paint(clockOnly); };
       paint();
       // Games played with the keyboard take focus, so arrow and number keys work straight away.
-      if (['merge', 'snake', 'shop', 'pinball', 'bricks', 'drop', 'dino', 'water', 'candy', 'knife', 'count'].includes(mode)) board.focus({ preventScroll: true });
+      if (['merge', 'snake', 'shop', 'pinball', 'bricks', 'drop', 'dino', 'dash', 'water', 'candy', 'knife', 'count', 'survive', 'stairs'].includes(mode)) board.focus({ preventScroll: true });
     }
     return panel;
   }
@@ -3336,17 +3852,17 @@
 .gfx-game-content > .gfx-game-stage { order:1; }
 .gfx-game-content > .gfx-game-info { order:2; margin:8px 0 0; font-size:.85em; opacity:.8; }
 /* Extra games: a wide runner, two portrait arcades and numbered liquid layers. */
-.gfx-game-board:is([data-kind="dino"], [data-kind="water"], [data-kind="candy"], [data-kind="knife"], [data-kind="count"]) {
+.gfx-game-board:is([data-kind="dino"], [data-kind="dash"], [data-kind="water"], [data-kind="candy"], [data-kind="knife"], [data-kind="count"], [data-kind="survive"], [data-kind="stairs"]) {
   display:flex; flex-direction:column; gap:8px; padding:6px; background:color-mix(in srgb,var(--gfx-line, #6B4528) 16%,var(--gfx-ink, #FFF4D9));
 }
-.gfx-game-board:is([data-kind="dino"], [data-kind="water"], [data-kind="candy"], [data-kind="knife"], [data-kind="count"]) > * {
+.gfx-game-board:is([data-kind="dino"], [data-kind="dash"], [data-kind="water"], [data-kind="candy"], [data-kind="knife"], [data-kind="count"], [data-kind="survive"], [data-kind="stairs"]) > * {
   aspect-ratio:auto; place-items:normal; font-size:inherit; line-height:1.3;
 }
 .gfx-game-board .gfx-arcade-canvas { display:block; width:100%; height:auto; box-sizing:border-box; border:2.5px solid var(--gfx-line, #6B4528); border-radius:12px; touch-action:none; cursor:pointer; }
 .gfx-game-board .gfx-arcade-pad { display:flex; gap:6px; border-radius:0; }
 .gfx-arcade-pad button { flex:1; min-height:40px; padding:.4em .6em !important; touch-action:none; font-size:.85em; }
 .gfx-arcade-pad button[data-held] { background:var(--gfx-pick, #FFE17A); translate:0 2px; }
-.gfx-game-board:is([data-kind="dino"], [data-kind="water"], [data-kind="candy"], [data-kind="knife"], [data-kind="count"]):focus-visible { outline:3px solid var(--gfx-accent, #F0763A); outline-offset:3px; }
+.gfx-game-board:is([data-kind="dino"], [data-kind="dash"], [data-kind="water"], [data-kind="candy"], [data-kind="knife"], [data-kind="count"], [data-kind="survive"], [data-kind="stairs"]):focus-visible { outline:3px solid var(--gfx-accent, #F0763A); outline-offset:3px; }
 /* 크게 보기: the column over the whole window (top layer), the page dimmed behind it. */
 :host([data-game-large]) { position:fixed; inset:12px; width:auto; height:auto; max-width:none; max-height:none; margin:0; padding:0; border:0; background:transparent;
   overflow:visible; color:inherit; z-index:2147483000; box-shadow:0 0 0 100vmax rgba(12,10,24,.55); border-radius:24px; }
