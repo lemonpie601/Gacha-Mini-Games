@@ -110,10 +110,12 @@ Kenney의 효과음(CC0, 아래 '에셋 출처')을 씁니다: 버튼·선택은
 - Impact Sounds: 타격·피해·폭발·부딪힘·착지·보너스 소리 (`assets/kenney-impact-sounds/`)
 - RPG Audio: 칼 뽑기·찍기·베기, 문·자물쇠, 동전, 책 넘기기, 발소리, 냄비 소리 (`assets/kenney-rpg-audio/`)
 - UI Pack - Pixel Adventure: [🎨 픽셀] UI의 버튼·패널 타일 (`assets/kenney-ui-pack-pixel-adventure/`)
+- Mini Dungeon: 좀비 학교 탈출의 2.5D 바닥·벽·출구·책상·바리케이드·열쇠·사람·좀비 (`assets/kenney-mini-dungeon/`)
+- Isometric Blocks: 보석 광부의 2.5D 흙·돌 블록 (`assets/kenney-isometric-blocks/`)
 
 ## 설치
 
-마리나라 설정의 개인 확장에서 `Gacha-Mini-Games-1.13.0.personal-extension.zip`을 설치합니다.
+마리나라 설정의 개인 확장에서 `Gacha-Mini-Games-1.14.0.personal-extension.zip`을 설치합니다.
 
 생성 화면이 2.5초 이상 이어지면 미니게임이 나타납니다.
 
@@ -123,6 +125,10 @@ Kenney의 효과음(CC0, 아래 '에셋 출처')을 씁니다: 버튼·선택은
 node --test tools/test-loading.mjs tools/test-extra-games.mjs tools/test-difficulty.mjs
 node tools/test-games-browser.mjs  # Windows의 Microsoft Edge 필요
 ```
+
+## 1.14.0
+
+좀비 학교 탈출과 보석 광부를 2.5D(아이소메트릭)로 다시 그렸습니다. 좀비 학교 탈출은 가로 화면이 되었고(세로 휴대폰에서는 가로로 돌리라는 안내), 왼쪽 아래 조이스틱과 오른쪽 아래 아이템 버튼이 화면에 보입니다. 조이스틱을 위로 밀면 화면 위쪽으로 걸어갑니다. 보석 광부는 흙·돌이 입체 블록으로 쌓여 보이고, 보이는 블록을 누르면 그 블록을 팝니다.
 
 ## 1.13.0
 
