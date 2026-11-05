@@ -46,7 +46,7 @@ test('Survive: the hero shoots the nearest blob and crystals fill the level bar'
   assert.ok(g.gems.length === 1 || g.xp > 0, 'dropped a crystal');
 });
 test('Survive: the first blobs die to one shot, at every level', () => {
-  for (const lv of LEVELS) { const g = games.newSurviveGame(rng(), lv); g.start(); run(g, 20); assert.ok(g.enemies.length > 0 && g.enemies.every(e => e.hp <= g.dmg), lv); }
+  for (const lv of LEVELS) { const g = games.newSurviveGame(rng(), lv); g.start(); run(g, 12); assert.ok(g.enemies.length > 0 && g.enemies.every(e => e.hp <= g.dmg), lv); }
 });
 test('Survive: a level-up pauses the run and offers 3 cards; picking one applies it, and picks stack', () => {
   const g = games.newSurviveGame(rng(), 'normal'); g.start();
@@ -61,7 +61,7 @@ test('Survive: a level-up pauses the run and offers 3 cards; picking one applies
   if (id !== 'heal') assert.notEqual(stats(), before, id);
   g.step(500); assert.ok(g.time > t, 'running again');
   // The same card again is a second level of it.
-  const d = games.newSurviveGame(rng(), 'normal'); d.ups.dmg[3](d); d.ups.dmg[3](d); assert.ok(Math.abs(d.dmg - 1.4 * 2.25) < 1e-9);
+  const d = games.newSurviveGame(rng(), 'normal'); d.ups.dmg[3](d); d.ups.dmg[3](d); assert.ok(Math.abs(d.dmg - 1.4 * 1.35 * 1.28) < 1e-9, 'damage gains shrink with every stack');
   d.choices = [{ id: 'dmg', lv: 1 }]; d.pick(0); d.choices = [{ id: 'dmg', lv: 2 }]; d.pick(0); assert.equal(d.stacks.dmg, 2);
 });
 test('Survive: contact hurts once per second of invulnerability and the run ends at 0 HP', () => {
@@ -76,7 +76,8 @@ test('Survive: contact hurts once per second of invulnerability and the run ends
 test('Survive: the blobs come in growing numbers, stay soft, and a wave and a big blob arrive on time', () => {
   const g = games.newSurviveGame(rng(), 'normal');
   const grow0 = g.grow(), rate0 = g.rate();
-  g.time = 120; assert.ok(g.rate() > rate0 * 2.5, 'number'); assert.ok(g.grow() > grow0 && g.grow() < 3, 'toughness stays mild');
+  g.time = 30; assert.ok(g.grow() < 3, 'toughness stays mild at first'); g.time = 120; assert.ok(g.rate() > rate0 * 2.5, 'number'); assert.ok(g.grow() > grow0);
+  const late = g.grow(); g.time = 240; assert.ok(g.grow() > late * 4, 'after a few minutes toughness outgrows any build'); assert.ok(g.touch() > 1, 'bumps hurt more later');
   const h = games.newSurviveGame(rng(), 'normal'); h.start(); h.hp = h.maxHp = 9999; h.xp = -1e9; h.dmg = 50;
   run(h, 61); assert.ok(h.waveAt >= 25 && h.bigAt >= 60, 'wave at 25 s, big blob at 60 s');
   const hard = games.newSurviveGame(rng(), 'expert'), easy = games.newSurviveGame(rng(), 'easiest');
@@ -92,11 +93,12 @@ test('Survive: levels come fast in the first minute, then slow down; HP comes ba
   run(r, r.regenEvery); assert.equal(r.hp, r.maxHp);
   const hn = games.newSurviveGame(rng(), 'normal'); hn.start(); hn.hp = 1; hn.honey.push({ x: hn.hero.x, y: hn.hero.y, sp: 0 }); hn.spawnAcc = 0; hn.rate = () => 0; hn.step(50); assert.equal(hn.hp, 2, 'honey heals');
 });
-test('Survive: a casual player lives 3+ minutes at 보통, 달인 is harder but not instant', () => {
-  const alive = lv => [1, 2, 3].map(s => { const g = games.newSurviveGame(rng(s * 31), lv); g.start(); kite(g, rng(s), 200); return g.time; });
-  const normal = alive('normal'); assert.ok(normal.every(t => t >= 180), normal.join());
-  const easiest = alive('easiest'); assert.ok(easiest.every(t => t >= 180), easiest.join());
-  const expert = alive('expert').sort((a, b) => a - b); assert.ok(expert[1] >= 120, expert.join());
+test('Survive: a middling player outlasts 보통 for a while, every level ends in time, and the levels keep their order', () => {
+  const alive = lv => [1, 2, 3].map(s => { const g = games.newSurviveGame(rng(s * 31), lv); g.start(); kite(g, rng(s), 600); return g.time; }).sort((x, y) => x - y)[1];
+  const t = Object.fromEntries(LEVELS.map(lv => [lv, alive(lv)]));
+  for (const lv of LEVELS) assert.ok(t[lv] < 600, 'the late game overwhelms every build: ' + lv + ' ' + t[lv]);
+  assert.ok(t.normal >= 90 && t.expert >= 30, JSON.stringify(t));
+  assert.ok(t.easiest > t.easy && t.easy > t.normal && t.normal > t.hard && t.hard > t.expert, JSON.stringify(t));
 });
 test('Survive: spread, piercing, explosion, lightning, vacuum, orbit, regen and crit upgrades each do their thing', () => {
   const up = (id, g) => g.ups[id][3](g);
@@ -244,9 +246,11 @@ test('Bus: all bays taken and the front passenger fitting none of them ends the 
   const f = lot([[0, 0, 0, 0], [3, 0, 0, 1]], [2, 2, 2], 1); f.tap(0); assert.equal(f.tap(1), false); assert.ok(f.buses[1].bump > 0);
 });
 
-// 솜사탕 질주: a run with the road cleared, one obstacle put in front of the bunny.
+// 솜사탕 질주: a run with the road cleared, one obstacle put in front of the hero.
 const dash = (lv = 'normal') => { const g = games.newDashGame(rng(), lv); g.started = true; g.gap = 1e9; return g; };
 const lane = (g, o, ms = 1200) => { g.obstacles = [o]; for (let t = 0; t < ms && !g.ended; t += 10) g.step(10); };
+// step() advances at most 100 ms a call, so longer spans go in small steps.
+const runMs = (g, ms) => { for (let t = 0; t < ms && !g.ended; t += 20) g.step(20); };
 const low = { kind: 'low', x: 300, w: 30, h: 40 }, bar = { kind: 'bar', x: 300, w: 46, h: 0 };
 test('Dash: jumping clears a low block that would hurt on the ground, and a second jump works once in the air', () => {
   const ground = dash(); lane(ground, { ...low });
@@ -263,10 +267,10 @@ test('Dash: sliding clears a high bar, standing or jumping does not', () => {
   const jump = dash(); jump.jump(); lane(jump, { ...bar }); assert.equal(jump.hits, 1);
   assert.ok(stand.hurt > 0, 'blinks after a bump');
 });
-test('Dash: energy drains, a bump costs a chunk, a bottle refills, and no energy ends the run', () => {
+test('Dash: energy drains, a bump costs a chunk, a heart refills, and no energy ends the run', () => {
   const g = dash(); g.step(1000); assert.ok(g.energy < 1 && g.energy > 0.9, String(g.energy));
-  g.energy = 0.5; g.items = [{ kind: 'milk', x: g.x, y: 20 }]; g.step(20); assert.ok(g.energy > 0.65, 'bottle'); assert.equal(g.items.length, 0);
-  g.items = [{ kind: 'candy', x: g.x, y: 20 }]; g.step(20); assert.equal(g.candies, 1); assert.equal(g.score, g.candies * 10 + g.metres);
+  g.energy = 0.5; g.items = [{ kind: 'heart', x: g.x, y: 20 }]; g.step(20); assert.ok(g.energy > 0.65, 'heart'); assert.equal(g.items.length, 0);
+  g.items = [{ kind: 'candy', x: g.x, y: 20 }]; g.step(20); assert.equal(g.candies, 1); assert.equal(g.score, g.points + g.metres); assert.equal(g.points, 10);
   const bump = dash(); lane(bump, { ...low }, 800); assert.ok(bump.energy < 0.85, String(bump.energy));
   const dead = dash(); dead.energy = 0.001; dead.step(100); assert.ok(dead.ended && dead.fail.why === 'tired' && dead.energy === 0);
 });
@@ -285,4 +289,44 @@ test('Dash: speed and obstacles ramp up with the distance, harder levels start f
   assert.ok(gaps(24000) < gaps(1000), gaps(1000) + ' → ' + gaps(24000));
   const play = games.newDashGame(rng(5), 'normal'); play.started = true; for (let i = 0; i < 400; i++) play.step(50);
   assert.ok(play.obstacles.length > 0 || play.ended);
+});
+
+test('Dash: candy in a row builds a combo that a bump or a pause breaks', () => {
+  const g = dash(); for (let k = 0; k < 5; k++) { g.items = [{ kind: 'candy', x: g.x, y: 20 }]; g.step(20); }
+  assert.equal(g.combo, 5); assert.ok(g.pops.some(p => p.text.includes('5')), 'a combo popup'); assert.ok(g.points > 50, 'combo candy is worth more');
+  runMs(g, 1500); assert.equal(g.combo, 0); assert.equal(g.bestCombo, 5);
+  const bump = dash(); bump.combo = 4; bump.comboT = 9; lane(bump, { ...low }, 1200); assert.equal(bump.combo, 0);
+});
+test('Dash: the magnet pulls candy in, giant smashes obstacles, sprint is fast and untouchable', () => {
+  const m = dash(); m.items = [{ kind: 'magnet', x: m.x, y: 20 }]; m.step(20); assert.ok(m.magnet > 7);
+  m.items = [{ kind: 'candy', x: m.x + 150, y: 90 }]; for (let t = 0; t < 600 && !m.candies; t += 10) m.step(10); assert.equal(m.candies, 1, 'drawn in from off the path');
+  const plain = dash(); plain.items = [{ kind: 'candy', x: plain.x + 150, y: 90 }]; plain.step(600); assert.equal(plain.candies, 0, 'without the magnet it is out of reach');
+  const big = dash(); big.items = [{ kind: 'giant', x: big.x, y: 20 }]; big.step(20); assert.ok(big.giant > 5 && big.size() > 1.5 && big.box().h > 44);
+  lane(big, { ...low }, 1200); assert.equal(big.hits, 0, 'no damage'); assert.equal(big.obstacles.length, 0, 'the block is smashed'); assert.equal(big.smashed, 1); assert.ok(big.points >= 25);
+  const stand = dash(); stand.items = [{ kind: 'giant', x: stand.x, y: 20 }]; stand.step(20); lane(stand, { ...bar }, 1200); assert.equal(stand.smashed, 1, 'the high bar too');
+  runMs(big, 7000); assert.equal(big.giant, 0); assert.equal(big.size(), 1);
+  const fast = dash(), slow = dash(); fast.items = [{ kind: 'sprint', x: fast.x, y: 20 }]; fast.step(20); slow.step(20);
+  assert.ok(fast.sprint > 3 && fast.speed > slow.speed * 1.5);
+  lane(fast, { ...low }, 1000); assert.equal(fast.hits, 0); assert.equal(fast.energy > 0.95, true, 'invulnerable');
+  const pit = dash(); pit.items = [{ kind: 'sprint', x: pit.x, y: 20 }]; pit.step(20); lane(pit, { kind: 'pit', x: 200, w: 120, h: 0 }, 500); assert.equal(pit.ended, false, 'sprint hops pits');
+});
+test('Dash: candy fills the bonus gauge, then a sky segment of candy with nothing to hit, then back to the road', () => {
+  const g = dash(); for (let k = 0; k < 40 && !g.bonus; k++) { g.items = [{ kind: 'candy', x: g.x, y: 20 }]; g.step(20); }
+  assert.ok(g.bonus > 6 && g.bonus <= 8, 'a bonus of 6-8 seconds: ' + g.bonus); assert.equal(g.bonuses, 1); assert.equal(g.gauge, 0); assert.equal(g.obstacles.length, 0);
+  const energy = g.energy; g.gap = 0; g.step(50); assert.ok(g.items.length >= 10, 'dense candy'); assert.ok(g.items.every(it => it.kind === 'candy') && g.obstacles.length === 0);
+  assert.ok(g.y > 0, 'flying'); runMs(g, 1500); assert.ok(g.y > 60, 'up in the sky'); assert.equal(g.hits, 0);
+  g.obstacles = [{ ...low, x: g.x }]; g.step(100); assert.equal(g.hits, 0, 'nothing hurts in the sky'); assert.ok(g.energy >= energy - 0.001, 'no drain in the sky');
+  g.slide(true); runMs(g, 1000); assert.ok(g.y < 60, 'a held slide dives'); g.slide(false);
+  for (let t = 0; t < 6000 && g.bonus; t += 50) { g.step(50); g.obstacles = []; }
+  assert.equal(g.bonus, 0); for (let t = 0; t < 2000 && g.y > 0; t += 20) g.step(20); assert.equal(g.y, 0, 'dropped back to the road'); assert.ok(!g.ended);
+  g.gap = 0; g.step(20); assert.ok(g.obstacles.length > 0, 'obstacles are back');
+  // Candy picked in the sky does not refill the gauge.
+  assert.equal(g.gauge < 1, true);
+});
+test('Dash: the stage theme changes about every 900 m, and platforms and power-ups come in the road', () => {
+  const g = dash(); g.step(16); assert.equal(g.stage, 0); g.distance = 36000 - 5; g.step(50); assert.equal(g.stage, 1); assert.ok(g.pops.some(p => p.text.includes('2')), 'a stage popup');
+  g.distance = 4 * 36000 + 10; g.step(16); assert.equal(g.stage, 4); assert.ok(g.stageAt > 0);
+  let platforms = 0, powers = new Set(), hearts = 0;
+  for (let i = 0; i < 80; i++) { const d = games.newDashGame(rng(i + 3), 'normal'); d.started = true; d.nextPower = 0; d.nextHeart = 0; d.distance = 5000; d.gap = 0; d.step(1); platforms += d.platforms.length; for (const it of d.items) { if (['magnet', 'giant', 'sprint'].includes(it.kind)) powers.add(it.kind); if (it.kind === 'heart') hearts++; } }
+  assert.ok(platforms > 10, 'floating platforms: ' + platforms); assert.equal(powers.size, 3, 'all three power-ups appear'); assert.equal(hearts, 80);
 });

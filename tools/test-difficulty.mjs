@@ -7,7 +7,7 @@ import { test } from 'node:test';
 const source = readFileSync(new URL('../extension.js', import.meta.url), 'utf8');
 const models = source.slice(source.indexOf('  function newMineGame('), source.indexOf('  function writingLoad('));
 const names = ['newMineGame', 'newFruitGame', 'new2048Game', 'newMemoryGame', 'newShopGame', 'newPinballGame', 'newBrickGame', 'newBlockGame', 'newSnakeGame',
-  'newRecipeGame', 'newPopGame', 'newSlideGame', 'newLightsGame', 'newDropGame', 'newDinoGame', 'newWaterSortGame', 'newKnifeGame', 'newCountMastersGame', 'newCandyGame', 'newSurviveGame', 'newBusGame'];
+  'newRecipeGame', 'newPopGame', 'newSlideGame', 'newLightsGame', 'newDropGame', 'newDinoGame', 'newWaterSortGame', 'newKnifeGame', 'newCountMastersGame', 'newCandyGame', 'newSurviveGame', 'newBusGame', 'newZombieGame', 'newJumpGame', 'newDigGame'];
 const games = runInNewContext(`${models}\nObject.fromEntries(${JSON.stringify(names)}.map(name => [name, eval(name)]))`);
 const rng = (seed = 12345) => () => ((seed = Math.imul(seed, 1664525) + 1013904223 >>> 0) / 4294967296);
 const LEVELS = ['easiest', 'easy', 'normal', 'hard', 'expert'];
@@ -18,7 +18,7 @@ test('every game builds at all five levels', () => {
 test('the game table offers the same five levels for every game', () => {
   const table = source.slice(source.indexOf('    const GAMES = {'), source.indexOf('    const fresh = (which'));
   const rows = table.split('\n').filter((l) => l.includes('levels: ['));
-  assert.equal(rows.length, 22);
+  assert.equal(rows.length, 25);
   for (const row of rows) assert.deepEqual([...row.matchAll(/\['(\w+)', '[^']+', '[^']*'\]/g)].map((m) => m[1]), LEVELS, row.slice(0, 40));
 });
 test('levels get harder from 입문 to 달인', () => {
