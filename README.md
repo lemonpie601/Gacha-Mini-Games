@@ -115,7 +115,7 @@ Kenney의 효과음(CC0, 아래 '에셋 출처')을 씁니다: 버튼·선택은
 
 ## 설치
 
-마리나라 설정의 개인 확장에서 `Gacha-Mini-Games-1.14.0.personal-extension.zip`을 설치합니다.
+마리나라 설정의 개인 확장에서 `Gacha-Mini-Games-1.14.1.personal-extension.zip`을 설치합니다.
 
 생성 화면이 2.5초 이상 이어지면 미니게임이 나타납니다.
 
@@ -125,6 +125,10 @@ Kenney의 효과음(CC0, 아래 '에셋 출처')을 씁니다: 버튼·선택은
 node --test tools/test-loading.mjs tools/test-extra-games.mjs tools/test-difficulty.mjs
 node tools/test-games-browser.mjs  # Windows의 Microsoft Edge 필요
 ```
+
+## 1.14.1
+
+좀비 학교 탈출의 바닥과 벽이 비뚤게 이어 붙던 문제를 고쳤습니다. 그림 파일의 각도가 격자와 조금 달라 타일 사이가 벌어졌기 때문에, 바닥과 벽은 격자에 딱 맞는 마름모·입방체로 직접 그리고(복도는 차가운 회색 돌, 교실은 따뜻한 바닥, 벽은 윗면이 밝은 돌 블록) 사람·좀비·열쇠·출구·책상·바리케이드만 렌더 그림을 씁니다.
 
 ## 1.14.0
 

@@ -1,4 +1,4 @@
-/* Gacha Mini Games v1.14.0 — personal extension for Gacha Forge on Marinara Engine.
+/* Gacha Mini Games v1.14.1 — personal extension for Gacha Forge on Marinara Engine.
  * While a chapter or story is being generated, the generation screen gets a column of small games on its right:
  * 지뢰찾기, 사과 상자 (the fruit follows the 말랑 colour preset), 2048, 짝 맞추기, 쿠키 가게, 디저트 핀볼 and more. Closing the column or
  * finishing generation removes them; nothing here touches the run, rewards or the generation request.
@@ -4992,6 +4992,26 @@
             ctx.beginPath(); ctx.moveTo(sx - HW, sy); ctx.lineTo(sx, sy + HH); ctx.lineTo(sx + HW, sy); ctx.lineTo(sx + HW, sy - h); ctx.lineTo(sx, sy + HH - h); ctx.lineTo(sx - HW, sy - h); ctx.closePath();
             ctx.fillStyle = side; ctx.fill(); if (top) diamond(sx, sy - h, top);
           };
+          // Floors and walls are drawn to the grid exactly (the renders are not quite at the grid's angle, so tiles of them
+          // drift apart): a stone cube with a light top, a lit right face and a shaded left one, edged so the courses read.
+          const cube = (x, y, h, top, right, left, edge) => {
+            const [sx, sy] = iso(x, y);
+            ctx.beginPath(); ctx.moveTo(sx - HW, sy); ctx.lineTo(sx, sy + HH); ctx.lineTo(sx, sy + HH - h); ctx.lineTo(sx - HW, sy - h); ctx.closePath(); ctx.fillStyle = left; ctx.fill();
+            ctx.beginPath(); ctx.moveTo(sx, sy + HH); ctx.lineTo(sx + HW, sy); ctx.lineTo(sx + HW, sy - h); ctx.lineTo(sx, sy + HH - h); ctx.closePath(); ctx.fillStyle = right; ctx.fill();
+            diamond(sx, sy - h, top);
+            if (edge) {
+              ctx.lineWidth = 1; ctx.strokeStyle = edge; ctx.beginPath();
+              ctx.moveTo(sx - HW, sy - h); ctx.lineTo(sx, sy - h - HH); ctx.lineTo(sx + HW, sy - h); ctx.lineTo(sx, sy + HH - h); ctx.closePath();
+              ctx.moveTo(sx, sy + HH - h); ctx.lineTo(sx, sy + HH);
+              for (const k of [0.5]) { ctx.moveTo(sx - HW, sy - h * k); ctx.lineTo(sx, sy + HH - h * k); ctx.lineTo(sx + HW, sy - h * k); }
+              ctx.stroke();
+            }
+          };
+          const tileFloor = (sx, sy, a, b, line) => {
+            diamond(sx, sy, a);
+            ctx.beginPath(); ctx.moveTo(sx, sy - HH * 0.55); ctx.lineTo(sx + HW * 0.55, sy); ctx.lineTo(sx, sy + HH * 0.55); ctx.lineTo(sx - HW * 0.55, sy); ctx.closePath(); ctx.fillStyle = b; ctx.fill();
+            ctx.beginPath(); ctx.moveTo(sx, sy - HH); ctx.lineTo(sx + HW, sy); ctx.lineTo(sx, sy + HH); ctx.lineTo(sx - HW, sy); ctx.closePath(); ctx.lineWidth = 1; ctx.strokeStyle = line; ctx.stroke();
+          };
           const shadow = (x, y, color, w = 12) => { const [sx, sy] = iso(x, y); ctx.beginPath(); ctx.ellipse(sx, sy, w, w * 0.5, 0, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill(); };
           const shout = (text, x, y, size, color) => {
             ctx.font = font(size); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
@@ -5018,11 +5038,15 @@
               const cx = x + 0.5, cy = y + 0.5; if (!inView(cx, cy)) continue;
               const v = game.t[i], fog = fogOf(x, y, i), [sx, sy] = iso(cx, cy);
               if (v === game.WALL) {
-                tall.push([cx + cy, () => { if (!put('wall', cx, cy)) block(cx, cy, '#8d95b0', '#5b6280'); if (fog > 0.01) block(cx, cy, 'rgba(8,10,25,' + fog + ')', 'rgba(8,10,25,' + fog + ')', 40); }]);
+                tall.push([cx + cy, () => { const lt = (x + y) & 1; cube(cx, cy, 40, lt ? '#c9cdea' : '#c2c6e4', '#9aa0c8', '#6f74a0', 'rgba(60,62,100,.35)'); if (fog > 0.01) block(cx, cy, 'rgba(8,10,25,' + fog + ')', 'rgba(8,10,25,' + fog + ')', 40); }]);
                 continue;
               }
               const corridor = y === game.cy || y === game.cy + 1;
-              if (!put(v === game.DOOR || (corridor && (x * 7 + y * 3) % 6 === 0) ? 'floor-detail' : 'floor', cx, cy)) diamond(sx, sy, corridor ? ((x + y) & 1 ? '#a8b3bd' : '#9ba7b2') : ((x + y) & 1 ? '#d8c8a2' : '#cebd96'));
+              // Corridor stone in cool grey, classrooms in a warm floor, a checker to keep the grid readable; doors are a darker sill.
+              const odd = (x + y) & 1;
+              if (v === game.DOOR) tileFloor(sx, sy, '#8a7058', '#9b8066', 'rgba(40,30,20,.35)');
+              else if (corridor) tileFloor(sx, sy, odd ? '#a9afc9' : '#a1a7c2', odd ? '#b3b9d2' : '#abb1cb', 'rgba(60,62,100,.28)');
+              else tileFloor(sx, sy, odd ? '#d9c7a4' : '#d1bf9b', odd ? '#e1d0ae' : '#d9c8a5', 'rgba(110,84,50,.22)');
               if (fog > 0.01) diamond(sx, sy, 'rgba(8,10,25,' + fog + ')');
               if (v === game.EXIT) tall.push([cx + cy, () => {
                 if (game.unlocked) { ctx.beginPath(); ctx.ellipse(sx, sy, 30, 16, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(139,227,107,' + (0.35 + 0.15 * Math.sin(now / 200)) + ')'; ctx.fill(); }
