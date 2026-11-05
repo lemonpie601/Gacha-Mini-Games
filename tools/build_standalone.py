@@ -19,12 +19,48 @@ MOUNT = r"""
   const host = document.getElementById("games");
   const wrap = el("div");
   const shadow = host.attachShadow({ mode: "open" });
+  // Games drawn for a wide screen (the T-Rex is 600×170, the bunny run as wide): on an upright phone they ask to be turned.
+  const WIDE = ["dino", "dash"];
   const page = new CSSStyleSheet();
   page.replaceSync(":host(:not([data-game-large])) { position:relative; inset:auto; width:100%; height:100%; } :host(:not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 150px); }"
-    // Phones: the game list becomes one scrolling row above the game.
-    + "@media (max-width:640px) { .gfx-load-games { flex-direction:column; align-items:stretch; --room:calc(100cqh - 260px); }"
-    + " .gfx-game-nav { flex:none; display:flex; flex-direction:row; overflow-x:auto; overflow-y:hidden; max-height:none; padding:5px; gap:5px; }"
-    + " .gfx-game-tab { flex:0 0 4.4em; } .gfx-game-utils { display:none; } .gfx-game-content { flex:1; min-height:0; padding:8px; } }");
+    + " .gfx-load-games { position:relative; } .gfx-shelf-toggle { display:none; }"
+    // Phones held upright: the game list folds into one bar — the game on screen, [게임 목록 ▾], 크게 보기 and the
+    // sound switch (게임 접기 would only leave an empty page here). [게임 목록] opens every game as a grid over the
+    // screen, so nothing has to be scrolled sideways. (The how-to line under the board comes from the games' own
+    // stylesheet.) The type is set in px: the column's 1.5vw comes out at 12px on a phone.
+    + "@media (max-width:640px) { .gfx-load-games { flex-direction:column; align-items:stretch; gap:6px; font-size:15px; }"
+    + " :host(:not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 200px); }"
+    + " .gfx-game-nav { flex:none; display:flex; flex-direction:row; flex-wrap:nowrap; align-items:center; overflow:visible; max-height:none; padding:5px; gap:6px; border-radius:18px; }"
+    + " :host(:not([data-shelf])) .gfx-game-tab:not([aria-pressed=\"true\"]) { display:none; }"
+    + " :host(:not([data-shelf])) .gfx-game-tab { flex:1; min-width:0; flex-direction:row; justify-content:flex-start; gap:.45em; padding:.3em .8em !important; }"
+    + " :host(:not([data-shelf])) .gfx-game-tab i { font-size:1.3em !important; } :host(:not([data-shelf])) .gfx-game-tab span { font-size:.95em; overflow:hidden; text-overflow:ellipsis; }"
+    + " .gfx-shelf-toggle { display:block; flex:none; white-space:nowrap; }"
+    + " .gfx-game-utils { flex:none; flex-direction:row; flex-wrap:nowrap; gap:5px; }"
+    + " .gfx-game-nav .gfx-game-util { flex:none; font-size:.78em !important; padding:.35em .6em !important; }"
+    + " .gfx-game-utils > :last-child { display:none; }"
+    + " :host([data-shelf]) .gfx-game-nav { position:absolute; left:0; right:0; top:0; z-index:6; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); align-items:stretch; gap:6px; padding:8px;"
+    + " max-height:calc(100cqh - 6px); overflow-y:auto; overscroll-behavior:contain; box-shadow:0 5px 0 var(--gfx-line, #6B4528), 0 14px 36px rgba(0,0,0,.3); }"
+    + " :host([data-shelf]) .gfx-game-tab { padding:.35em .1em !important; } :host([data-shelf]) .gfx-game-tab i { font-size:1.5em !important; } :host([data-shelf]) .gfx-game-tab span { font-size:.76em; }"
+    + " :host([data-shelf]) .gfx-shelf-toggle { grid-column:1 / 3; } :host([data-shelf]) .gfx-game-utils { grid-column:3 / -1; justify-content:flex-end; }"
+    + " .gfx-game-content { flex:1; min-height:0; padding:8px 8px 10px; border-radius:18px; }"
+    + " .gfx-game-head { margin-bottom:6px; gap:5px 8px; } .gfx-game-title { font-size:1em; } }"
+    // Phones on their side: the game takes the full height, the list stays a column on the right under the theme
+    // picker, which the page pins above it (46px). The tall boards (macaron drop, pinball) drop their 170px floor so
+    // they fit the height instead of scrolling.
+    + "@media (orientation:landscape) and (max-height:520px) { .gfx-load-games { gap:8px; font-size:14px; }"
+    + " :host(:not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 108px); }"
+    + " .gfx-game-board:is([data-kind=\"drop\"], [data-kind=\"pinball\"]) { width:min(100%, var(--room) * var(--fit, 1)); }"
+    + " .gfx-game-nav { flex-basis:150px; margin-top:46px; max-height:calc(100% - 46px); overscroll-behavior:contain; }"
+    + " .gfx-game-content { padding:6px 10px 8px; } }"
+    // Games made for a wide screen ask to turn the phone; 그냥 세로로 dismisses it for this visit.
+    + ".gfx-rotate { display:none; position:absolute; inset:var(--nav-h, 90px) 0 0; z-index:3; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:20px; text-align:center;"
+    + " background:color-mix(in srgb,var(--gfx-card, #FFFDF5) 96%,transparent); border:3px solid var(--gfx-line, #6B4528); border-radius:18px; }"
+    + " .gfx-rotate b { font-size:1.25em; font-weight:normal; } .gfx-rotate p { margin:0; opacity:.75; }"
+    + " .gfx-rotate i { font-style:normal; font-size:3.4em; line-height:1; animation:gfx-turn 2.4s ease-in-out infinite; }"
+    + " .gfx-rotate button { min-width:12em; font-size:1em; }"
+    + " @keyframes gfx-turn { 0%, 30% { rotate:0deg; } 60%, 100% { rotate:-90deg; } }"
+    + " @media (prefers-reduced-motion: reduce) { .gfx-rotate i { animation:none; rotate:-90deg; } }"
+    + " @media (max-width:640px) and (orientation:portrait) { " + WIDE.map((k) => `:host([data-game="${k}"]:not([data-portrait-ok])) .gfx-rotate`).join(", ") + " { display:flex; } }");
   wrap.attachShadow({ mode: "open" });
   shadow.append(wrap);
   const inner = new CSSStyleSheet();
@@ -33,6 +69,23 @@ MOUNT = r"""
   wrap.shadowRoot.adoptedStyleSheets = [styleSheet(), page];
   const panel = makeLoadingGames(wrap);
   wrap.shadowRoot.append(panel);
+  // The turn-your-phone card covers the game, below the list. Android can turn the screen itself from fullscreen;
+  // iOS cannot, so there the card only asks.
+  const rotate = el("div", "gfx-rotate");
+  const turnIcon = el("i", "", "📱"); turnIcon.setAttribute("aria-hidden", "true");
+  rotate.append(turnIcon, el("b", "", "가로로 돌려서 하는 게임이에요"), el("p", "", "휴대폰을 옆으로 눕히면 화면을 넓게 써요"));
+  const canLock = document.fullscreenEnabled && typeof screen.orientation?.lock === "function";
+  if (canLock) {
+    const turn = el("button", "", "가로 전체 화면으로"); turn.type = "button";
+    on(turn, "click", async () => { try { await document.documentElement.requestFullscreen({ navigationUI: "hide" }); await screen.orientation.lock("landscape"); } catch {} });
+    rotate.append(turn);
+  }
+  const stay = el("button", "", "그냥 세로로 할게요"); stay.type = "button";
+  on(stay, "click", () => { wrap.setAttribute("data-portrait-ok", ""); panel.querySelector(".gfx-game-board")?.focus({ preventScroll: true }); });
+  rotate.append(stay);
+  panel.append(rotate);
+  const nav = panel.querySelector(".gfx-game-nav");
+  new ResizeObserver(() => wrap.style.setProperty("--nav-h", nav.offsetTop + nav.offsetHeight + 6 + "px")).observe(nav);
   const pick = document.getElementById("preset");
   const apply = () => {
     host.setAttribute("data-gfx-preset", pick.value);
@@ -43,6 +96,17 @@ MOUNT = r"""
   try { const saved = localStorage.getItem("gfx-games-preset"); if (saved && [...pick.options].some((o) => o.value === saved)) pick.value = saved; } catch {}
   on(pick, "change", apply);
   apply();
+  // Upright phones: [게임 목록] opens the whole list as a grid; picking a game, tapping the game or Esc closes it.
+  const shelf = el("button", "gfx-shelf-toggle gfx-game-util"); shelf.type = "button";
+  nav.insertBefore(shelf, nav.querySelector(".gfx-game-utils"));
+  const setShelf = (open) => { wrap.toggleAttribute("data-shelf", open); shelf.textContent = open ? "닫기 ▴" : "게임 목록 ▾"; shelf.setAttribute("aria-expanded", String(open)); };
+  setShelf(false);
+  on(shelf, "click", () => setShelf(!wrap.hasAttribute("data-shelf")));
+  on(panel, "pointerdown", (e) => { if (wrap.hasAttribute("data-shelf") && !e.target.closest?.(".gfx-game-nav")) setShelf(false); });
+  on(panel, "keydown", (e) => { if (e.key === "Escape" && wrap.hasAttribute("data-shelf")) setShelf(false); });
+  // In the sideways list the picked game may sit below the fold: bring it into view.
+  const reveal = () => panel.querySelector('.gfx-game-tab[aria-pressed="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  on(panel, "click", (e) => { if (e.target.closest?.(".gfx-game-tab")) { setShelf(false); requestAnimationFrame(reveal); } });
   panel.querySelector('[data-game="shop"]')?.click();
 })();
 """
@@ -51,7 +115,7 @@ HTML = """<!doctype html>
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Gacha Mini Games</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -82,13 +146,36 @@ HTML = """<!doctype html>
   label { display:flex; align-items:center; gap:.4em; font-size:.9em; }
   select { font:inherit; color:var(--gfx-text); background:var(--gfx-card); border:2.5px solid var(--gfx-line); border-radius:999px; padding:.2em .8em; box-shadow:0 2px 0 var(--gfx-line); }
   #games { flex:1; min-height:520px; display:block; padding:10px 12px 12px; }
+  /* Phones: one slim header row and the games fill the rest of the screen, clear of the notch and the home bar.
+     The picker keeps 16px type so iOS does not zoom in when it opens. */
+  @media (max-width:640px) {
+    html, body { overscroll-behavior:none; }
+    body { height:100dvh; -webkit-tap-highlight-color:transparent; -webkit-text-size-adjust:100%; }
+    header { flex-wrap:nowrap; padding:max(6px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left)); }
+    h1 { min-width:0; font-size:1.08em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    h1 small { margin-left:.3em; }
+    label .tag { display:none; }
+    select { max-width:9em; padding:.1em .6em; }
+    #games { min-height:0; padding:6px max(6px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)); }
+  }
+  /* Phones on their side: no title row, the games get the whole height. The picker sits at the top of the game
+     list on the right, which leaves it 46px. */
+  @media (orientation:landscape) and (max-height:520px) {
+    html, body { overscroll-behavior:none; }
+    body { height:100dvh; -webkit-tap-highlight-color:transparent; -webkit-text-size-adjust:100%; }
+    header { position:absolute; z-index:1; top:6px; right:max(8px, env(safe-area-inset-right)); width:150px; padding:0; }
+    h1, label .tag { display:none; }
+    label, select { width:100%; }
+    select { padding:.15em .6em; }
+    #games { min-height:0; padding:6px max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
+  }
 </style>
 </head>
 <body>
 <header>
   <h1>🎮 Gacha Mini Games<small>v__VERSION__</small></h1>
-  <label>테마
-    <select id="preset">
+  <label><span class="tag">테마</span>
+    <select id="preset" aria-label="테마">
       <option value="cream">크림 코코아</option>
       <option value="berry">딸기 우유</option>
       <option value="mint">민트 초코</option>

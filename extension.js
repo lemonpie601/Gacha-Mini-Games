@@ -1,4 +1,4 @@
-/* Gacha Mini Games v1.10.0 — personal extension for Gacha Forge on Marinara Engine.
+/* Gacha Mini Games v1.11.0 — personal extension for Gacha Forge on Marinara Engine.
  * While a chapter or story is being generated, the generation screen gets a column of small games on its right:
  * 지뢰찾기, 사과 상자 (the fruit follows the 말랑 colour preset), 2048, 짝 맞추기, 쿠키 가게, 디저트 핀볼 and more. Closing the column or
  * finishing generation removes them; nothing here touches the run, rewards or the generation request.
@@ -1258,78 +1258,131 @@
     return game;
   }
 
-  // Jelly Survivors: a jelly hero shoots the nearest blob by itself; sugar crystals fill the level bar, each level offers three upgrades.
-  // The field is 360×520. Enemies grow tougher and faster with time, and a big blob arrives every minute.
+  // Jelly Survivors: a jelly hero shoots the nearest blob by itself; sugar crystals fill the level bar, each level offers three
+  // upgrades that stack. The field is 360×520. The early blobs die to one shot; the pressure grows mostly in numbers (up to
+  // 150 on screen), a wave rushes in now and then and a big blob arrives every minute. Honey and a slow regen heal.
+  // Everything the screen should celebrate (hits, kills, blasts, level-ups) is pushed to game.events for the UI to take().
   function newSurviveGame(random = Math.random, difficulty = 'normal') {
-    const cfg = ({ easiest: [5, 0.09, 1.3], easy: [4, 0.11, 1.5], normal: [3, 0.13, 1.75], hard: [2, 0.15, 2], expert: [2, 0.18, 2.3] })[difficulty] || [3, 0.13, 1.75];
-    const W = 360, H = 520;
+    // Start HP, seconds per regen HP, toughness gained per minute, spawns per second, blob speed (start, cap), big blob contact damage.
+    const cfg = ({ easiest: [10, 6, 0.2, 1, 26, 52, 1], easy: [9, 8, 0.3, 1.1, 28, 56, 1], normal: [8, 10, 0.5, 1.25, 30, 62, 2], hard: [7, 14, 1.2, 2.2, 36, 74, 2], expert: [6, 24, 2, 3.2, 42, 86, 3] })[difficulty] || [8, 10, 0.45, 1.2, 30, 62, 2];
+    const W = 360, H = 520, MAX = 150;
+    // id: [icon, name, effect, apply, still offered?]
     const UPS = {
-      dmg: ['🍬', '단맛 폭탄', '피해 +30%', g => { g.dmg *= 1.3; }],
-      rate: ['⚡', '빠른 손', '발사 간격 -15%', g => { g.cool = Math.max(0.2, g.cool * 0.85); }],
-      multi: ['✨', '여러 갈래', '발사체 +1', g => { g.shots = Math.min(6, g.shots + 1); }],
-      orbit: ['🍭', '사탕 방패', '돌아가는 사탕 +1', g => { g.orbit = Math.min(6, g.orbit + 1); }],
-      speed: ['👟', '날쌘 젤리', '이동 속도 +15%', g => { g.speed = Math.min(170, g.speed * 1.15); }],
-      pickup: ['🧲', '자석 껌', '줍는 범위 +40%', g => { g.pickup *= 1.4; }],
-      maxhp: ['🧡', '탄탄 젤리', '최대 HP +1 · 1 회복', g => { g.maxHp++; g.hp = Math.min(g.maxHp, g.hp + 1); }],
-      heal: ['🍯', '시럽 회복', 'HP 2 회복', g => { g.hp = Math.min(g.maxHp, g.hp + 2); }],
+      dmg: ['🍬', '단맛 폭탄', '피해 +50%', g => { g.dmg *= 1.5; }],
+      rate: ['⚡', '빠른 손', '발사 간격 -20%', g => { g.cool = Math.max(0.12, g.cool * 0.8); }, g => g.cool > 0.13],
+      multi: ['✨', '부채꼴 발사', '발사체 +2 · 3갈래 → 5갈래', g => { g.shots += 2; }, g => g.shots < 9],
+      pierce: ['🍢', '관통 꼬치', '발사체가 적 2마리를 더 뚫어요', g => { g.pierce += 2; }, g => g.pierce < 10],
+      boom: ['💥', '팡팡 폭발', '쓰러뜨리면 주변이 터져요', g => { g.boom++; }, g => g.boom < 5],
+      chain: ['🌩️', '번개 젤리', '맞히면 근처 적에게 번개가 튀어요', g => { g.chain++; }, g => g.chain < 5],
+      orbit: ['🍭', '사탕 방패', '돌아가는 사탕 +2 · 더 크고 빠르게', g => { g.orbit += 2; }, g => g.orbit < 10],
+      crit: ['🎯', '행운의 별', '치명타 확률 +15% · 숫자가 커져요', g => { g.crit = Math.min(0.8, g.crit + 0.15); }, g => g.crit < 0.79],
+      vac: ['🌀', '반짝이 진공', '모든 반짝이를 빨아들여요 · 주기적으로', g => { g.vac++; g.vacT = 0; }, g => g.vac < 4],
+      speed: ['👟', '날쌘 젤리', '이동 속도 +20%', g => { g.speed = Math.min(190, g.speed * 1.2); }, g => g.speed < 189],
+      pickup: ['🧲', '자석 껌', '줍는 범위 +60%', g => { g.pickup *= 1.6; }, g => g.pickup < 200],
+      regen: ['🍀', '젤리 재생', 'HP가 더 빨리 차올라요', g => { g.regenEvery = Math.max(2.5, g.regenEvery * 0.7); }, g => g.regenEvery > 2.6],
+      maxhp: ['🧡', '탄탄 젤리', '최대 HP +2 · 2 회복', g => { g.maxHp += 2; g.hp = Math.min(g.maxHp, g.hp + 2); }],
+      heal: ['🍯', '시럽 회복', 'HP 4 회복', g => { g.hp = Math.min(g.maxHp, g.hp + 4); }, g => g.hp < g.maxHp],
     };
-    const game = { w: W, h: H, hero: { x: W / 2, y: H / 2, r: 11 }, hp: cfg[0], maxHp: cfg[0], dmg: 1, cool: 0.8, shots: 1, orbit: 0, speed: 100, pickup: 38,
-      enemies: [], bullets: [], gems: [], time: 0, over: 0, kills: 0, score: 0, level: 1, xp: 0, need: 5, pending: 0, choices: null, started: false, ended: false,
-      invuln: 0, hurtAt: -9, killAt: -9, gemAt: -9, levelAt: -9, bigAt: -9, spin: 0, fire: 0, dx: 0, dy: 0, nextBig: 60, spawnAcc: 0 };
+    const game = { w: W, h: H, hero: { x: W / 2, y: H / 2, r: 11 }, hp: cfg[0], maxHp: cfg[0], dmg: 1.4, cool: 0.45, shots: 1, orbit: 0, speed: 105, pickup: 70, pierce: 0, boom: 0, chain: 0, crit: 0.05, vac: 0, regenEvery: cfg[1],
+      enemies: [], bullets: [], gems: [], honey: [], bolts: [], events: [], stacks: {}, time: 0, over: 0, kills: 0, score: 0, level: 1, xp: 0, need: 2, pending: 0, choices: null, started: false, ended: false,
+      invuln: 0, hurtAt: -9, killAt: -9, gemAt: -9, levelAt: -9, bigAt: -9, waveAt: -9, spin: 0, fire: 0, dx: 0, dy: 0, nextBig: 60, nextWave: 25, spawnAcc: 3, regenT: 0, vacT: 0, vacOn: 0, combo: 0, comboAt: -9, comboMax: 0, ids: 0 };
     const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
     game.ups = UPS;
     game.start = () => { if (!game.ended) game.started = true; };
     // The stick: a direction with length 0..1.
     game.aim = (x, y) => { const m = Math.hypot(x, y); if (!(m > 0)) { game.dx = game.dy = 0; return; } const k = Math.min(1, m) / m; game.dx = x * k; game.dy = y * k; };
-    game.grow = () => 1 + cfg[1] * game.time / 7;
-    game.rate = () => cfg[2] * (1 + game.time / 53);
+    // Blobs toughen slowly; what climbs is their number.
+    game.grow = () => 1 + cfg[2] * game.time / 60 * (1 + game.time / 240);
+    game.rate = () => cfg[3] * (0.8 + game.time / 50);
+    const emit = (t, x, y, v, extra) => { if (game.events.length < 300) game.events.push({ t, x, y, v, ...extra }); };
     const offer = () => {
-      const ids = Object.keys(UPS).filter(k => k !== 'heal' || game.hp < game.maxHp);
+      const ids = Object.keys(UPS).filter(k => !UPS[k][4] || UPS[k][4](game));
       game.choices = [];
-      while (game.choices.length < 3 && ids.length) { const id = ids.splice(Math.floor(random() * ids.length), 1)[0]; game.choices.push({ id, icon: UPS[id][0], name: UPS[id][1], desc: UPS[id][2] }); }
+      while (game.choices.length < 3 && ids.length) { const id = ids.splice(Math.floor(random() * ids.length), 1)[0]; game.choices.push({ id, icon: UPS[id][0], name: UPS[id][1], desc: UPS[id][2], lv: (game.stacks[id] || 0) + 1 }); }
     };
     game.pick = i => {
       const c = game.choices && game.choices[i];
       if (!c) return false;
-      UPS[c.id][3](game); game.choices = null;
+      UPS[c.id][3](game); game.stacks[c.id] = c.lv; game.choices = null; emit('power', game.hero.x, game.hero.y, c.lv);
       if (game.pending > 0) { game.pending--; offer(); }
       return true;
     };
-    const spawn = big => {
+    const spawn = (big, x, y) => {
       const side = Math.floor(random() * 4), t = random(), m = game.grow(), k = big ? Math.floor(game.time / 60) : 0;
-      const e = { x: side < 2 ? t * W : side === 2 ? -8 : W + 8, y: side === 0 ? -8 : side === 1 ? H + 8 : t * H, kind: Math.floor(random() * 4), hit: 0, big, push: 0 };
-      e.hp = e.max = big ? 14 * m * (1 + 0.45 * (k - 1)) : 1.6 * m;
-      e.speed = clamp((big ? 24 : 30) * (1 + cfg[1] * game.time / 20), 20, big ? 52 : 82) * (0.9 + random() * 0.2);
-      e.r = big ? 21 : 10 + random() * 2; e.dmg = big ? 2 : 1;
+      const e = { x: x ?? (side < 2 ? t * W : side === 2 ? -8 : W + 8), y: y ?? (side === 0 ? -8 : side === 1 ? H + 8 : t * H), kind: Math.floor(random() * 4), hit: 0, big, push: 0, id: ++game.ids };
+      e.hp = e.max = big ? 14 * m * (1 + 0.35 * (k - 1)) : 1 * m;
+      e.speed = clamp(cfg[4] * (1 + game.time / 150), 20, big ? 44 : cfg[5]) * (big ? 0.75 : 1) * (0.9 + random() * 0.2);
+      e.r = big ? 21 : 10 + random() * 2; e.dmg = big ? cfg[6] : 1;
       game.enemies.push(e);
     };
-    const kill = e => {
-      game.kills++; game.killAt = game.time;
-      const n = e.big ? 6 : 1;
-      for (let i = 0; i < n; i++) game.gems.push({ x: e.x + (n > 1 ? (random() - 0.5) * 40 : 0), y: e.y + (n > 1 ? (random() - 0.5) * 40 : 0), v: e.big ? 3 : 1 });
+    const gem = (x, y, v) => {
+      if (game.gems.length >= 120) { const g = game.gems[Math.floor(random() * game.gems.length)]; g.v += v; return; }
+      game.gems.push({ x, y, v, sp: 0 });
     };
-    const hurt = (e, dmg) => { e.hp -= dmg; e.hit = 0.1; if (e.hp <= 0 && !e.dead) { e.dead = true; kill(e); } };
+    // A blast hurts what stands near; kills inside it blast too, up to three links deep.
+    const blast = (x, y, depth) => {
+      const r = 34 + 11 * game.boom; emit('boom', x, y, r);
+      for (const o of game.enemies) if (!o.dead && Math.hypot(o.x - x, o.y - y) < r + o.r) hit(o, game.dmg * 0.8, depth + 1, true);
+    };
+    const kill = (e, depth) => {
+      game.kills++; game.killAt = game.time;
+      game.combo = game.time - game.comboAt < 2.2 ? game.combo + 1 : 1; game.comboAt = game.time; game.comboMax = Math.max(game.comboMax, game.combo);
+      emit('kill', e.x, e.y, e.big ? 1 : 0, { kind: e.kind, combo: game.combo });
+      const n = e.big ? 6 : 1;
+      for (let i = 0; i < n; i++) gem(e.x + (n > 1 ? (random() - 0.5) * 40 : 0), e.y + (n > 1 ? (random() - 0.5) * 40 : 0), e.big ? 3 : 1);
+      // Honey: sometimes from a blob, always from a big one, and for every 25 kills in a row.
+      if ((e.big || random() < 0.025 || game.combo % 25 === 0) && game.honey.length < 4) game.honey.push({ x: e.x, y: e.y, sp: 0 });
+      if (game.boom && depth < 3) blast(e.x, e.y, depth);
+    };
+    // quiet: part of a blast, so no number for every blob in it.
+    const hit = (e, dmg, depth = 0, quiet = false) => {
+      if (e.dead) return;
+      const crit = !quiet && random() < game.crit; if (crit) dmg *= 2.5;
+      e.hp -= dmg; e.hit = 0.1;
+      if (!quiet || e.hp <= 0) emit('hit', e.x, e.y - e.r, dmg, { crit });
+      if (e.hp <= 0) { e.dead = true; kill(e, depth); }
+    };
+    const zap = (from, dmg) => {
+      let n = game.chain + 1;
+      for (const o of game.enemies) {
+        if (n <= 0) break;
+        if (o === from || o.dead || Math.hypot(o.x - from.x, o.y - from.y) > 110) continue;
+        n--; if (game.bolts.length < 24) game.bolts.push({ x1: from.x, y1: from.y, x2: o.x, y2: o.y, t: 0.2 });
+        hit(o, dmg * 0.6, 0, true);
+      }
+    };
     const tick = dt => {
       const h = game.hero;
-      game.time += dt; game.spin += dt * 3; game.invuln = Math.max(0, game.invuln - dt);
+      game.time += dt; game.spin += dt * (3 + game.orbit * 0.25); game.invuln = Math.max(0, game.invuln - dt);
+      if (game.combo && game.time - game.comboAt > 2.2) game.combo = 0;
       h.x = clamp(h.x + game.dx * game.speed * dt, h.r, W - h.r); h.y = clamp(h.y + game.dy * game.speed * dt, h.r, H - h.r);
-      // Spawns: a steady rate that climbs, a big blob every minute.
+      // Regen: a heart every so many seconds.
+      if (game.hp < game.maxHp) { game.regenT += dt; if (game.regenT >= game.regenEvery) { game.regenT = 0; game.hp++; emit('heal', h.x, h.y, 1); } } else game.regenT = 0;
+      // Spawns: a rate that climbs, a wave every 30 s, a big blob every minute.
       game.spawnAcc += game.rate() * dt;
-      while (game.spawnAcc >= 1) { game.spawnAcc--; if (game.enemies.length < 90) spawn(false); }
-      if (game.time >= game.nextBig) { game.nextBig += 60; spawn(true); game.bigAt = game.time; }
+      while (game.spawnAcc >= 1) { game.spawnAcc--; if (game.enemies.length < MAX) { const g = Math.min(MAX - game.enemies.length, random() < 0.2 ? 3 : 1), side = Math.floor(random() * 4), t = random(); for (let i = 0; i < g; i++) spawn(false, side < 2 ? t * W + i * 14 : side === 2 ? -8 - i * 8 : W + 8 + i * 8, side === 0 ? -8 - i * 8 : side === 1 ? H + 8 + i * 8 : t * H + i * 14); } }
+      if (game.time >= game.nextWave) {
+        game.nextWave += 30; game.waveAt = game.time; emit('wave', 0, 0, 0);
+        const side = Math.floor(random() * 4), n = Math.min(MAX - game.enemies.length, 12 + Math.floor(game.time / 8));
+        for (let i = 0; i < n; i++) { const t = (i + 0.5) / n; spawn(false, side < 2 ? t * W : side === 2 ? -10 - (i % 3) * 10 : W + 10 + (i % 3) * 10, side === 0 ? -10 - (i % 3) * 10 : side === 1 ? H + 10 + (i % 3) * 10 : t * H); }
+      }
+      if (game.time >= game.nextBig) { game.nextBig += 60; spawn(true); game.bigAt = game.time; emit('big', 0, 0, 0); }
       // Chase, push apart a little, touch.
       const list = game.enemies;
       for (const e of list) {
         const d = Math.hypot(h.x - e.x, h.y - e.y) || 1;
         e.x += (h.x - e.x) / d * e.speed * dt; e.y += (h.y - e.y) / d * e.speed * dt; e.hit = Math.max(0, e.hit - dt); e.push = Math.max(0, e.push - dt);
         if (d < e.r + h.r * 0.8 && !game.invuln) {
-          game.hp -= e.dmg; game.invuln = 1; game.hurtAt = game.time;
-          for (const o of list) { const od = Math.hypot(o.x - h.x, o.y - h.y) || 1; if (od < 60) { o.x += (o.x - h.x) / od * 40; o.y += (o.y - h.y) / od * 40; } }
+          game.hp -= e.dmg; game.invuln = 1; game.hurtAt = game.time; game.regenT = 0; emit('hurt', h.x, h.y, e.dmg);
+          // A shove that clears the hero some room.
+          for (const o of list) { const od = Math.hypot(o.x - h.x, o.y - h.y) || 1; if (od < 110) { o.x += (o.x - h.x) / od * 80; o.y += (o.y - h.y) / od * 80; } }
           if (game.hp <= 0) { game.hp = 0; game.ended = true; }
         }
       }
       for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
-        const a = list[i], b = list[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), min = (a.r + b.r) * 0.8;
+        const a = list[i], b = list[j], dx = b.x - a.x, dy = b.y - a.y;
+        if (dx > 24 || dx < -24 || dy > 24 || dy < -24) continue;
+        const d = Math.hypot(dx, dy), min = (a.r + b.r) * 0.8;
         if (d > 0 && d < min) { const s = (min - d) / 2 / d; a.x -= dx * s; a.y -= dy * s; b.x += dx * s; b.y += dy * s; }
       }
       // Auto fire at the nearest blob, fanned out when there are several shots.
@@ -1337,30 +1390,45 @@
       if (game.fire <= 0 && list.length) {
         let near = null, best = Infinity;
         for (const e of list) { const d = Math.hypot(e.x - h.x, e.y - h.y); if (d < best) { best = d; near = e; } }
-        if (best < 300) {
+        if (best < 320) {
           game.fire = game.cool; const a = Math.atan2(near.y - h.y, near.x - h.x);
-          for (let i = 0; i < game.shots; i++) { const b = a + (i - (game.shots - 1) / 2) * 0.2; game.bullets.push({ x: h.x, y: h.y, vx: Math.cos(b) * 280, vy: Math.sin(b) * 280, life: 1.1 }); }
+          for (let i = 0; i < game.shots; i++) { const b = a + (i - (game.shots - 1) / 2) * 0.17; game.bullets.push({ x: h.x, y: h.y, vx: Math.cos(b) * 300, vy: Math.sin(b) * 300, life: 1.2, pierce: game.pierce, hits: [] }); }
         }
       }
       for (const b of game.bullets) {
         b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
-        for (const e of list) if (!e.dead && Math.hypot(e.x - b.x, e.y - b.y) < e.r + 4) { hurt(e, game.dmg); b.life = 0; break; }
+        for (const e of list) {
+          if (e.dead || b.life <= 0 || b.hits.includes(e) || Math.hypot(e.x - b.x, e.y - b.y) >= e.r + 4) continue;
+          hit(e, game.dmg); b.hits.push(e);
+          if (game.chain && random() < 0.4 + 0.1 * game.chain) zap(e, game.dmg);
+          if (b.pierce > 0) b.pierce--; else b.life = 0;
+        }
       }
-      // Orbiting candies hurt what they touch, once in a while per blob.
+      // Orbiting candies hurt what they touch, once in a while per blob; more candies spin wider and faster.
+      const ring = 38 + game.orbit * 3;
       for (let k = 0; k < game.orbit; k++) {
-        const a = game.spin + k * Math.PI * 2 / game.orbit, ox = h.x + Math.cos(a) * 40, oy = h.y + Math.sin(a) * 40;
-        for (const e of list) if (!e.dead && !e.push && Math.hypot(e.x - ox, e.y - oy) < e.r + 7) { e.push = 0.4; hurt(e, game.dmg * 0.7); const d = Math.hypot(e.x - h.x, e.y - h.y) || 1; e.x += (e.x - h.x) / d * 8; e.y += (e.y - h.y) / d * 8; }
+        const a = game.spin + k * Math.PI * 2 / game.orbit, ox = h.x + Math.cos(a) * ring, oy = h.y + Math.sin(a) * ring;
+        for (const e of list) if (!e.dead && !e.push && Math.hypot(e.x - ox, e.y - oy) < e.r + 9) { e.push = 0.3; hit(e, game.dmg * 0.8); const d = Math.hypot(e.x - h.x, e.y - h.y) || 1; e.x += (e.x - h.x) / d * 10; e.y += (e.y - h.y) / d * 10; }
       }
+      for (const b of game.bolts) b.t -= dt;
+      game.bolts = game.bolts.filter(b => b.t > 0);
       game.enemies = list.filter(e => !e.dead); game.bullets = game.bullets.filter(b => b.life > 0 && b.x > -20 && b.x < W + 20 && b.y > -20 && b.y < H + 20);
-      // Crystals drift to the hero inside the pickup radius.
-      for (const g of game.gems) {
+      // Crystals and honey drift to the hero inside the pickup radius, quicker and quicker; the vacuum pulls every one.
+      if (game.vac && (game.vacT -= dt) <= 0) { game.vacT = Math.max(6, 22 - 4 * game.vac); game.vacOn = 1.5; emit('vac', h.x, h.y, 0); }
+      game.vacOn = Math.max(0, game.vacOn - dt);
+      for (const g of game.gems.concat(game.honey)) {
         const d = Math.hypot(h.x - g.x, h.y - g.y) || 1;
-        if (d < game.pickup) { g.x += (h.x - g.x) / d * 230 * dt; g.y += (h.y - g.y) / d * 230 * dt; }
-        if (d < h.r + 6) { g.got = true; game.xp += g.v; game.gemAt = game.time; }
+        if (d < game.pickup || game.vacOn > 0) g.sp = Math.min(560, (g.sp || 0) + 1000 * dt);
+        if (g.sp) { g.x += (h.x - g.x) / d * g.sp * dt; g.y += (h.y - g.y) / d * g.sp * dt; }
+        if (d < h.r + 6) {
+          g.got = true;
+          if (g.v) { game.xp += g.v; game.gemAt = game.time; } else if (game.hp < game.maxHp) { game.hp++; emit('heal', h.x, h.y, 1); }
+        }
       }
-      game.gems = game.gems.filter(g => !g.got);
+      game.gems = game.gems.filter(g => !g.got); game.honey = game.honey.filter(g => !g.got);
+      // Levels come quick at first and slow down.
       while (game.xp >= game.need) {
-        game.xp -= game.need; game.level++; game.need = Math.round(game.need * 1.3 + 3); game.levelAt = game.time;
+        game.xp -= game.need; game.level++; game.need = Math.round(1 + game.level * 1.2 + game.level * game.level * 0.05); game.levelAt = game.time; emit('level', h.x, h.y, game.level);
         if (game.choices) game.pending++; else offer();
       }
       game.score = Math.floor(game.time) * 10 + game.kills;
@@ -1372,45 +1440,7 @@
       // A level-up pauses the run until a card is picked.
       while (left > 0 && !game.ended && !game.choices) { const dt = Math.min(left, 1 / 60); left -= dt; tick(dt); }
     };
-    return game;
-  }
-
-  // Cloud Stairs: a zigzag staircase of cloud blocks; each step is straight on or turned. Climb keeps the facing, turn flips it first.
-  function newStairsGame(random = Math.random, difficulty = 'normal') {
-    // Start drain per second, extra drain per step climbed, refill per step, share of turned steps.
-    const cfg = ({ easiest: [0.3, 0.00225, 0.09, 0.45], easy: [0.36, 0.003, 0.085, 0.52], normal: [0.42, 0.0039, 0.08, 0.6], hard: [0.46, 0.0045, 0.075, 0.68], expert: [0.5, 0.0052, 0.072, 0.76] })[difficulty] || [0.42, 0.0039, 0.08, 0.6];
-    const game = { n: 0, face: 1, left: 1, coins: 0, score: 0, started: false, ended: false, clock: 0, fail: null, dirs: [1, 1], cols: [0, 1], coin: [false, false], climbAt: -9, coinAt: -9, last: 'climb' };
-    const make = i => {
-      while (game.dirs.length <= i) {
-        const k = game.dirs.length;
-        game.dirs.push(random() < cfg[3] ? -game.dirs[k - 1] : game.dirs[k - 1]); game.cols.push(game.cols[k - 1] + game.dirs[k]); game.coin.push(k > 2 && random() < 0.12);
-      }
-    };
-    game.dirAt = i => { make(i); return game.dirs[i]; };
-    game.colAt = i => { make(i); return game.cols[i]; };
-    game.hasCoin = i => { make(i); return game.coin[i]; };
-    game.drain = () => Math.min(1.6, cfg[0] + cfg[1] * game.n);
-    const act = turn => {
-      if (game.ended) return false;
-      game.started = true;
-      const face = turn ? -game.face : game.face, ok = face === game.dirAt(game.n + 1);
-      game.face = face; game.last = turn ? 'turn' : 'climb';
-      if (!ok) { game.ended = true; game.fail = { t: game.clock, why: 'wrong', dir: face }; return false; }
-      game.n++; game.score = game.n; game.left = Math.min(1, game.left + cfg[2]); game.climbAt = game.clock;
-      if (game.hasCoin(game.n)) { game.coins++; game.coinAt = game.clock; }
-      make(game.n + 8);
-      return true;
-    };
-    make(10);
-    game.climb = () => act(false);
-    game.turn = () => act(true);
-    game.step = ms => {
-      const dt = Math.max(0, Math.min(250, ms)) / 1000;
-      game.clock += dt;
-      if (!game.started || game.ended) return;
-      game.left -= game.drain() * dt;
-      if (game.left <= 0) { game.left = 0; game.ended = true; game.fail = { t: game.clock, why: 'time', dir: game.face }; }
-    };
+    game.take = () => game.events.splice(0);
     return game;
   }
 
@@ -1485,6 +1515,144 @@
         if (game.energy <= 0) { game.energy = 0; fail('tired'); }
       }
     };
+    return game;
+  }
+
+  // 사탕 버스: a parking lot of small buses, each facing a way. A bus whose way out is clear drives into the first free
+  // bay at the top; the jelly queue boards the bay buses of their colour, a full bus leaves. The lot is built backwards:
+  // buses are placed last-to-leave first, each with a clear way out past the ones already placed, so an exit order always
+  // exists, and the queue is made from that order. Times are in ms; dir 0 up, 1 right, 2 down, 3 left; a bus is two cells
+  // long, x/y is its front cell and the second cell lies behind it.
+  function newBusGame(random = Math.random, difficulty = 'normal', level = 1) {
+    const di = ['easiest', 'easy', 'normal', 'hard', 'expert'].indexOf(difficulty), d = di < 0 ? 2 : di, L = Math.max(1, level | 0);
+    const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0], DRIVE = 640, BOARD = 240, CHEER = 560, LEAVE = 560, BUMP = 320;
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    // More buses, colours and cells with the level; the five levels set where it starts.
+    let nb = Math.min(16, 5 + d + (L - 1) + (L > 4 ? 1 : 0));
+    const nc = Math.min(7, nb, [3, 4, 5, 6, 7][d] + Math.floor((L - 1) / 3));
+    const nbays = Math.max(4, [5, 5, 5, 4, 4][d] - (L >= 5 && L % 2 ? 1 : 0)), cap = d >= 3 || L >= 6 ? 4 : 3;
+    const cellsFor = n => Math.ceil(2 * n / Math.min(0.62, 0.42 + 0.03 * d + 0.012 * L));
+    let cols = clamp(Math.round(Math.sqrt(cellsFor(nb) * 0.9)), 4, 7), rows = clamp(Math.ceil(cellsFor(nb) / cols), 4, 7);
+    const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+    const tail = b => [b.x - DX[b.dir], b.y - DY[b.dir]];
+    // Place buses last-to-leave first. A bus needs two free cells and a way to the edge that avoids the buses already
+    // placed (those leave after it); buses placed later may sit in its way, which is what the player has to solve.
+    const place = () => {
+      const occ = new Set(), list = [], key = (x, y) => x + ',' + y;
+      for (let k = 0; k < nb; k++) {
+        const found = [];
+        for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) for (let dir = 0; dir < 4; dir++) {
+          const tx = x - DX[dir], ty = y - DY[dir];
+          if (tx < 0 || ty < 0 || tx >= cols || ty >= rows || occ.has(key(x, y)) || occ.has(key(tx, ty))) continue;
+          let free = 0, ok = true;
+          for (let px = x + DX[dir], py = y + DY[dir]; px >= 0 && py >= 0 && px < cols && py < rows; px += DX[dir], py += DY[dir]) { if (occ.has(key(px, py))) { ok = false; break; } free++; }
+          if (ok) found.push({ x, y, dir, free });
+        }
+        if (!found.length) return null;
+        // Harder levels prefer long ways out, which later buses then block.
+        let pick = found[Math.floor(random() * found.length)];
+        for (let i = 0; i < d; i++) { const o = found[Math.floor(random() * found.length)]; if (o.free > pick.free) pick = o; }
+        occ.add(key(pick.x, pick.y)); occ.add(key(...tail(pick))); list.push(pick);
+      }
+      return list.reverse();
+    };
+    let list = null;
+    for (let tries = 0; !list; tries++) {
+      list = place();
+      if (!list && tries % 12 === 11) { if (cols < 7 || rows < 7) { if (cols <= rows && cols < 7) cols++; else if (rows < 7) rows++; else cols++; } else nb--; }
+    }
+    // Colours: every colour at least once; the exit order is the order of the list.
+    const colours = shuffle(list.map((_, i) => i < nc ? i : Math.floor(random() * nc)));
+    // Does taking the buses in exit order, each only when the front passenger needs a new one, fit in the bays?
+    const fits = q => {
+      const bays = []; let next = 0;
+      for (let i = 0; i < q.length;) {
+        let t = -1;
+        bays.forEach((b, j) => { if (b.c === q[i] && b.n < cap && (t < 0 || b.n > bays[t].n)) t = j; });
+        if (t >= 0) { if (++bays[t].n >= cap) bays.splice(t, 1); i++; continue; }
+        if (next >= nb || bays.length >= nbays) return false;
+        bays.push({ c: colours[next++], n: 0 });
+      }
+      return true;
+    };
+    const groups = colours.map(c => Array(cap).fill(c));
+    let queue = groups.flat();
+    {
+      // Mix neighbouring buses' passengers a little (more on harder levels), as far as the bays allow.
+      const mixed = [], p = Math.min(0.7, 0.15 + 0.1 * d + 0.04 * L);
+      for (let i = 0; i < groups.length; i++) {
+        if (i + 1 < groups.length && groups[i][0] !== groups[i + 1][0] && random() < p) {
+          const a = groups[i].slice(), b = groups[++i].slice();
+          while (a.length || b.length) mixed.push(a.length && (!b.length || random() < 0.5) ? a.shift() : b.shift());
+        } else mixed.push(...groups[i]);
+      }
+      if (fits(mixed)) queue = mixed;
+    }
+    const perm = shuffle(list.map((_, i) => i)), buses = [];
+    list.forEach((b, j) => { buses[perm[j]] = { id: perm[j], x: b.x, y: b.y, dir: b.dir, colour: colours[j], state: 'lot', bay: -1, bump: 0 }; });
+    const game = { cols, rows, cap, nbays, level: L, difficulty, buses, plan: perm, bays: Array(nbays).fill(null), queue, total: queue.length, boarded: 0,
+      boarding: null, leaving: [], events: [], time: 0, won: false, ended: false, lost: false, tapAt: -9, boardAt: -9, fullAt: -9, endAt: -9 };
+    const lot = () => game.buses.filter(b => b.state === 'lot');
+    const inside = (x, y) => x >= 0 && y >= 0 && x < game.cols && y < game.rows;
+    // The lot bus standing on a cell, if any.
+    game.at = (x, y) => lot().find(b => (b.x === x && b.y === y) || tail(b).join() === x + ',' + y) || null;
+    // The first bus in the way out, or null when the way is clear.
+    game.blocker = i => {
+      const b = game.buses[i];
+      if (!b || b.state !== 'lot') return null;
+      for (let x = b.x + DX[b.dir], y = b.y + DY[b.dir]; inside(x, y); x += DX[b.dir], y += DY[b.dir]) { const o = game.at(x, y); if (o) return o; }
+      return null;
+    };
+    game.left = () => game.queue.length;
+    game.tap = i => {
+      const b = game.buses[i];
+      if (game.ended || !b || b.state !== 'lot') return false;
+      const free = game.bays.indexOf(null);
+      if (game.blocker(i) || free < 0) { b.bump = BUMP; game.events.push('nope'); return false; }
+      b.state = 'drive'; b.bay = free; game.tapAt = game.time;
+      game.bays[free] = { bus: i, n: 0, drive: 0, arrived: false, cheer: -1 };
+      game.events.push('drive');
+      return true;
+    };
+    // Whom the front passenger would board: the fullest arrived bay bus of their colour with a seat left.
+    const target = () => {
+      let t = -1;
+      game.bays.forEach((bay, j) => { if (bay && bay.arrived && bay.cheer < 0 && bay.n < game.cap && game.buses[bay.bus].colour === game.queue[0] && (t < 0 || bay.n > game.bays[t].n)) t = j; });
+      return t;
+    };
+    const slice = dt => {
+      game.time += dt;
+      for (const b of game.buses) if (b.bump > 0) b.bump = Math.max(0, b.bump - dt);
+      for (const o of game.leaving) o.t += dt;
+      game.leaving = game.leaving.filter(o => o.t < LEAVE);
+      game.bays.forEach((bay, j) => {
+        if (!bay) return;
+        if (!bay.arrived) { bay.drive += dt; if (bay.drive >= DRIVE) bay.arrived = true; }
+        else if (bay.cheer >= 0 && (bay.cheer -= dt) <= 0) { game.leaving.push({ bus: bay.bus, bay: j, t: 0 }); game.buses[bay.bus].state = 'gone'; game.bays[j] = null; }
+      });
+      if (game.boarding) {
+        game.boarding.t += dt;
+        if (game.boarding.t >= BOARD) {
+          const bay = game.bays[game.boarding.bay]; game.boarding = null;
+          game.queue.shift(); game.boarded++; game.boardAt = game.time; bay.n++; game.events.push('board');
+          if (bay.n >= game.cap) { bay.cheer = CHEER; game.fullAt = game.time; game.events.push('full'); }
+        }
+      } else if (game.queue.length && !game.ended) {
+        const t = target();
+        if (t >= 0) game.boarding = { bay: t, t: 0 };
+      }
+      if (game.ended) return;
+      if (!game.queue.length && !game.boarding) { game.won = game.ended = true; game.endAt = game.time; game.events.push('win'); }
+      // Lost: every bay is taken, none is about to leave, and the front passenger fits none of them.
+      else if (!game.boarding && game.bays.every(bay => bay && bay.cheer < 0) && target() < 0
+        && !game.bays.some(bay => bay.n < game.cap && game.buses[bay.bus].colour === game.queue[0])) { game.ended = game.lost = true; game.endAt = game.time; game.events.push('lose'); }
+    };
+    game.step = ms => { let left = clamp(+ms || 0, 0, 1000); while (left > 0) { const dt = Math.min(left, 20); left -= dt; slice(dt); } };
+    // Nothing is moving or about to board.
+    game.busy = () => !!game.boarding || game.leaving.length > 0 || game.bays.some(bay => bay && (!bay.arrived || bay.cheer >= 0)) || (!game.ended && game.queue.length > 0 && target() >= 0);
+    game.settle = () => { for (let i = 0; i < 400 && game.busy(); i++) game.step(100); };
+    game.take = () => game.events.splice(0);
+    game.DRIVE = DRIVE; game.BOARD = BOARD; game.CHEER = CHEER; game.LEAVE = LEAVE; game.BUMP = BUMP;
     return game;
   }
 
@@ -1634,8 +1802,8 @@
       water: { name: '물 색깔 정리', tab: '물 정리', icon: '🧪', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '4색부터 · 레벨마다 늘어남'], ['easy', '쉬움', '6색부터 · 최대 10색'], ['normal', '보통', '7색부터 · 빨리 늘어남'], ['hard', '어려움', '8색부터 · 빨리 늘어남'], ['expert', '달인', '9색부터 · 최대 10색']], make: lv => newWaterSortGame(Math.random, lv) },
       knife: { name: '칼 던지기', tab: '칼 던지기', icon: '🔪', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '칼 6개부터 · 5판마다 보스'], ['easy', '쉬움', '빠르게 돌아요 · 칼 7개부터'], ['normal', '보통', '아주 빠르게 · 칼 8개부터'], ['hard', '어려움', '더 빠르게 · 칼 9개부터'], ['expert', '달인', '가장 빠르게 · 칼 10개부터']], make: lv => newKnifeGame(Math.random, lv) },
       count: { name: '인원 모으기', tab: '인원 모으기', icon: '🏃', level: 'normal', ownSfx: true, stages: true, levels: [['easiest', '입문', '1명 출발'], ['easy', '쉬움', '1명 출발 · 나쁜 문과 적 많이'], ['normal', '보통', '1명 출발 · 큰 적 무리'], ['hard', '어려움', '1명 출발 · 더 큰 적 무리 · 나쁜 문 대부분'], ['expert', '달인', '1명 출발 · 가장 큰 적 무리 · 거의 다 나쁜 문']], make: (lv, s) => newCountMastersGame(Math.random, lv, s) },
-      survive: { name: '젤리 생존기', tab: '생존기', icon: '🛡️', level: 'normal', ownSfx: true, levels: [['easiest', '입문', 'HP 5 · 1분마다 큰 젤리'], ['easy', '쉬움', 'HP 4 · 빨리 강해지고 많이 나와요'], ['normal', '보통', 'HP 3 · 아주 빨리 강해지고 아주 많이 나와요'], ['hard', '어려움', 'HP 2 · 더 빨리 강해지고 더 많이 나와요'], ['expert', '달인', 'HP 2 · 가장 빨리 강해지고 가장 많이 나와요']], make: lv => newSurviveGame(Math.random, lv) },
-      stairs: { name: '구름 계단', tab: '구름 계단', icon: '☁️', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '시간이 점점 빨라져요 · 꺾임 보통'], ['easy', '쉬움', '빠른 시간 · 적게 채워짐 · 꺾임 많이'], ['normal', '보통', '아주 빠른 시간 · 가장 적게 채워짐 · 계속 꺾임'], ['hard', '어려움', '더 빠른 시간 · 더 적게 채워짐 · 꺾임 68%'], ['expert', '달인', '가장 빠른 시간 · 거의 안 채워짐 · 꺾임 76%']], make: lv => newStairsGame(Math.random, lv) },
+      survive: { name: '젤리 생존기', tab: '생존기', icon: '🛡️', level: 'normal', ownSfx: true, levels: [['easiest', '입문', 'HP 10 · 젤리가 천천히 늘어요'], ['easy', '쉬움', 'HP 9 · HP가 빨리 차요'], ['normal', '보통', 'HP 8 · 1분마다 큰 젤리'], ['hard', '어려움', 'HP 7 · 젤리가 빨리 늘고 단단해져요'], ['expert', '달인', 'HP 6 · 아주 빨리 늘고 아주 단단해져요']], make: lv => newSurviveGame(Math.random, lv) },
+      bus: { name: '사탕 버스', tab: '사탕 버스', icon: '🚌', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '버스 5대 · 3색 · 칸 5개'], ['easy', '쉬움', '버스 6대 · 4색 · 칸 5개'], ['normal', '보통', '버스 7대 · 5색 · 칸 5개'], ['hard', '어려움', '버스 8대 · 6색 · 칸 4개 · 4명 탑승'], ['expert', '달인', '버스 9대 · 7색 · 칸 4개 · 4명 탑승']], make: lv => newBusGame(Math.random, lv) },
       dino: { name: '공룡 달리기', tab: '공룡', icon: '🦖', level: 'normal', ownSfx: true, hidden: true, levels: [['easiest', '입문', '크롬 공룡과 같은 속도'], ['easy', '쉬움', '빠르게 시작 · 빨리 빨라짐'], ['normal', '보통', '아주 빠르게 · 최고 속도 높게'], ['hard', '어려움', '더 빠르게 · 최고 속도 16'], ['expert', '달인', '가장 빠르게 · 최고 속도 17']], make: lv => newDinoGame(Math.random, lv) },
       dash: { name: '솜사탕 질주', tab: '질주', icon: '🐰', level: 'normal', ownSfx: true, hidden: true, levels: [['easiest', '입문', '천천히 달려요 · 기운이 천천히 줄어요'], ['easy', '쉬움', '조금 빨라요 · 부딪히면 기운 18%'], ['normal', '보통', '빠르게 달려요 · 부딪히면 기운 20%'], ['hard', '어려움', '더 빠르게 · 부딪히면 기운 22%'], ['expert', '달인', '가장 빠르게 · 기운이 가장 빨리 줄어요 · 부딪히면 기운 25%']], make: (lv) => newDashGame(Math.random, lv) },
     };
@@ -2808,10 +2976,10 @@
           if (game.ended) showResult('모든 별 반짝!', game.moves + '번 만에');
         };
       }
-      if (['dino', 'dash', 'water', 'candy', 'knife', 'count', 'survive', 'stairs'].includes(mode)) {
+      if (['dino', 'dash', 'water', 'candy', 'knife', 'count', 'survive', 'bus'].includes(mode)) {
         const kind = mode;
-        const [W, H] = ({ dino: [600, 170], dash: [640, 240], water: [360, 380], candy: [360, 452], knife: [360, 520], count: [360, 560], survive: [360, 520], stairs: [360, 520] })[kind];
-        board.style.setProperty('--fit', String(W / (H + (kind === 'dino' || kind === 'dash' ? 70 : kind === 'water' || kind === 'stairs' ? 56 : 0))));
+        const [W, H] = ({ dino: [600, 170], dash: [640, 240], water: [360, 380], candy: [360, 452], knife: [360, 520], count: [360, 560], survive: [360, 520], bus: [360, 500] })[kind];
+        board.style.setProperty('--fit', String(W / (H + (kind === 'dino' || kind === 'dash' ? 70 : kind === 'water' || kind === 'bus' ? 56 : 0))));
         const canvas = el('canvas', 'gfx-arcade-canvas'), ctx = canvas.getContext('2d');
         canvas.style.aspectRatio = W + '/' + H;
         canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', g.name + ' 게임 화면');
@@ -3484,9 +3652,11 @@
           };
         } else if (kind === 'survive') {
           // Jelly Survivors: drag anywhere to steer (a floating stick with a dead zone) or use WASD/arrows; the hero shoots by itself.
+          // The model's events become the juice: hit flashes, kill pops, damage numbers, blasts, rings, shake and a combo counter.
           const FOES = ['#F2606B', '#A47CF0', '#4FC487', '#FF9A3D'];
           const held = new Set();
-          let stick = null, lastHp = game.hp, lastKills = 0, lastGem = -9, lastLevel = -9, endSeen = false;
+          let stick = null, lastHp = game.hp, endSeen = false, lastNow = performance.now();
+          let parts = [], nums = [], rings = [], shake = 0, flash = [0, ''], comboAt = -9, healAt = -9;
           const CARD = i => ({ x: 24, y: 142 + i * 108, w: W - 48, h: 96 });
           const steer = () => {
             if (stick) return;
@@ -3512,16 +3682,29 @@
           keyDown = k => { if (['1', '2', '3'].includes(k)) return choose(+k - 1); held.add(k); game.start(); begin(); steer(); };
           keyUp = k => { held.delete(k); steer(); };
           release = () => { held.clear(); stick = null; game.aim(0, 0); };
+          // Particles, numbers and rings are capped, so a screen full of blobs stays smooth.
+          const pop = (x, y, color, n, speed = 110) => { for (let i = 0; i < n && parts.length < 140; i++) { const a = Math.random() * Math.PI * 2, v = speed * (0.4 + Math.random() * 0.8); parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0.45 + Math.random() * 0.25, c: color, r: 2 + Math.random() * 2.5 }); } };
+          const ring = (x, y, r, color, t = 0.35) => { if (rings.length < 10) rings.push({ x, y, r, c: color, t, max: t }); };
           onStep = dt => {
             game.step(dt);
+            let kills = 0, big = false, blast = false;
+            for (const ev of game.take()) {
+              if (ev.t === 'hit') { if (nums.length < 40) nums.push({ x: ev.x + (Math.random() - 0.5) * 10, y: ev.y, v: Math.max(1, Math.round(ev.v * 10)), crit: ev.crit, t: ev.crit ? 0.95 : 0.6, max: ev.crit ? 0.95 : 0.6 }); if (ev.crit) sfx.play('coin'); }
+              else if (ev.t === 'kill') { kills++; pop(ev.x, ev.y, FOES[ev.kind], ev.v ? 22 : 5); if (ev.v) big = true; comboAt = game.time; }
+              else if (ev.t === 'boom') { blast = true; ring(ev.x, ev.y, ev.v, '#FFB347', 0.3); }
+              else if (ev.t === 'level') { shake = Math.max(shake, 6); flash = [0.35, '255,225,120']; ring(ev.x, ev.y, 130, '#FFD447', 0.55); pop(ev.x, ev.y, '#FFD447', 24, 180); sfx.play('clear', 1); }
+              else if (ev.t === 'power') { ring(ev.x, ev.y, 70 + 10 * Math.min(6, ev.v), '#62D3DE', 0.5); pop(ev.x, ev.y, '#62D3DE', 18, 150); shake = Math.max(shake, 3); }
+              else if (ev.t === 'hurt') { shake = Math.max(shake, 7); flash = [0.4, '229,72,77']; ring(ev.x, ev.y, 90, '#ffffff', 0.3); }
+              else if (ev.t === 'heal') { healAt = game.time; pop(ev.x, ev.y, '#F58CC0', 8, 70); if (nums.length < 40) nums.push({ x: ev.x, y: ev.y - 16, v: '+1 ♥', crit: false, heal: true, t: 0.8, max: 0.8 }); sfx.play('coin'); }
+              else if (ev.t === 'vac') ring(ev.x, ev.y, 200, '#62D3DE', 0.6);
+            }
+            if (kills) { sfx.play('pop', Math.min(4, kills)); if (big) { shake = Math.max(shake, 5); sfx.play('hit', 2); } }
+            if (blast) sfx.play('hit', 1);
             if (game.hp < lastHp) { sfx.play('hurt'); navigator.vibrate?.(20); }
             lastHp = game.hp;
-            if (game.kills !== lastKills) { lastKills = game.kills; sfx.play('pop', 1); }
-            if (game.gemAt !== lastGem) { lastGem = game.gemAt; sfx.play('coin'); }
-            if (game.levelAt !== lastLevel) { if (lastLevel > -9) sfx.play('clear', 1); lastLevel = game.levelAt; }
-            if (game.ended && !endSeen) { endSeen = true; sfx.play('lose'); navigator.vibrate?.(60); finish(false, game.score); }
+            if (game.ended && !endSeen) { endSeen = true; sfx.play('lose'); navigator.vibrate?.(60); shake = 9; finish(false, game.score); }
           };
-          sign = () => [Math.floor(game.time), game.kills, game.hp, game.level, !!game.choices, game.started, game.ended && game.over > 0.8].join('/');
+          sign = () => [Math.floor(game.time), game.kills, game.hp, game.maxHp, game.level, !!game.choices, game.started, game.ended && game.over > 0.8].join('/');
           // A jelly blob: outlined, with two eyes.
           const blob = (x, y, r, color, sy = 1) => {
             ctx.beginPath(); ctx.ellipse(x, y, r * (2 - sy), r * sy, 0, 0, Math.PI * 2); ink2(color, 2);
@@ -3532,33 +3715,83 @@
             ctx.font = font(size); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
             ctx.lineWidth = Math.max(2, size * 0.2); ctx.strokeStyle = css(tone().line); ctx.strokeText(text, x, y); ctx.fillStyle = color; ctx.fillText(text, x, y);
           };
+          // Two lines at most, broken at " · " or by width.
+          const wrap = (text, maxW, size) => {
+            ctx.font = font(size);
+            const parts2 = text.split(' · ');
+            if (parts2.length > 1 && parts2.every(s => ctx.measureText(s).width <= maxW)) return parts2.slice(0, 2);
+            const lines = ['']; for (const ch of text) { const l = lines.length - 1; if (ctx.measureText(lines[l] + ch).width > maxW && lines.length < 2) lines.push(ch.trim()); else lines[l] += ch; }
+            return lines.map(s => s.trim());
+          };
           drawGame = () => {
-            const t = tone(), h = game.hero;
+            const t = tone(), h = game.hero, now = performance.now(), dt = Math.min(0.05, (now - lastNow) / 1000); lastNow = now;
+            shake = Math.max(0, shake - dt * 28); flash[0] = Math.max(0, flash[0] - dt * 1.6);
+            ctx.save();
+            if (shake > 0.3) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
             ground();
             ctx.beginPath(); ctx.arc(h.x, h.y, game.pickup, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = css(t.line, null, 1, 0.12); ctx.stroke();
-            for (const g of game.gems) { ctx.save(); ctx.translate(g.x, g.y); ctx.rotate(Math.PI / 4); ctx.beginPath(); ctx.rect(-3.5 - (g.v > 1), -3.5 - (g.v > 1), 7 + 2 * (g.v > 1), 7 + 2 * (g.v > 1)); ink2(g.v > 1 ? '#F58CC0' : '#62D3DE', 1.6); ctx.restore(); }
+            // Crystals (a streak behind the ones flying in) and honey.
+            for (const g of game.gems) {
+              const s = g.v > 1 ? 5 : 3.5;
+              if (g.sp) { const d = Math.hypot(h.x - g.x, h.y - g.y) || 1; ctx.beginPath(); ctx.moveTo(g.x, g.y); ctx.lineTo(g.x - (h.x - g.x) / d * g.sp * 0.05, g.y - (h.y - g.y) / d * g.sp * 0.05); ctx.lineWidth = 2.5; ctx.strokeStyle = g.v > 1 ? '#F58CC0' : '#62D3DE'; ctx.stroke(); }
+              ctx.save(); ctx.translate(g.x, g.y); ctx.rotate(Math.PI / 4); ctx.beginPath(); ctx.rect(-s, -s, s * 2, s * 2); ink2(g.v > 1 ? '#F58CC0' : '#62D3DE', 1.6); ctx.restore();
+            }
+            for (const g of game.honey) label('🍯', g.x, g.y + Math.sin(game.time * 6 + g.x) * 2, 17, css(t.text));
             for (const e of game.enemies) {
               const wob = 1 + 0.08 * Math.sin(game.time * 9 + e.x * 0.1);
               blob(e.x, e.y, e.r, e.hit > 0 ? '#ffffff' : FOES[e.kind], wob);
               if (e.big) { const w = 34; ctx.beginPath(); ctx.roundRect(e.x - w / 2, e.y - e.r - 12, w, 6, 3); ink2(css(t.card), 1.5); if (e.hp > 0) { ctx.beginPath(); ctx.roundRect(e.x - w / 2, e.y - e.r - 12, Math.max(4, w * e.hp / e.max), 6, 3); ink2('#E5484D', 1.5); } }
             }
-            for (const b of game.bullets) { ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI * 2); ink2('#FFD447', 1.6); }
+            // Blasts and rings under the shots.
+            for (const r of rings) { const p = 1 - r.t / r.max; ctx.globalAlpha = Math.max(0, 1 - p) * 0.9; ctx.beginPath(); ctx.arc(r.x, r.y, r.r * Math.sqrt(p), 0, Math.PI * 2); if (r.c === '#FFB347') { ctx.fillStyle = r.c; ctx.globalAlpha *= 0.4; ctx.fill(); ctx.globalAlpha = Math.max(0, 1 - p) * 0.9; } ctx.lineWidth = 4 * (1 - p) + 1.5; ctx.strokeStyle = r.c; ctx.stroke(); r.t -= dt; }
+            ctx.globalAlpha = 1; rings = rings.filter(r => r.t > 0);
+            // Shots: a streak, longer for piercing ones.
+            for (const b of game.bullets) {
+              const k = b.pierce > 0 || game.pierce ? 0.05 : 0.025;
+              ctx.beginPath(); ctx.moveTo(b.x - b.vx * k, b.y - b.vy * k); ctx.lineTo(b.x, b.y); ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.strokeStyle = css(t.line); ctx.stroke();
+              ctx.lineWidth = 3.5; ctx.strokeStyle = '#FFD447'; ctx.stroke(); ctx.lineCap = 'butt';
+            }
+            // Lightning: a zigzag from blob to blob.
+            for (const b of game.bolts) {
+              const dx = b.x2 - b.x1, dy = b.y2 - b.y1, m = Math.hypot(dx, dy) || 1, nx = -dy / m, ny = dx / m;
+              ctx.beginPath(); ctx.moveTo(b.x1, b.y1);
+              for (let k = 1; k < 4; k++) { const o = ((k + Math.floor(b.t * 60)) % 2 ? 1 : -1) * 7; ctx.lineTo(b.x1 + dx * k / 4 + nx * o, b.y1 + dy * k / 4 + ny * o); }
+              ctx.lineTo(b.x2, b.y2); ctx.lineJoin = 'round'; ctx.lineWidth = 6; ctx.strokeStyle = css(t.line); ctx.stroke(); ctx.lineWidth = 2.5; ctx.strokeStyle = '#FFF59A'; ctx.stroke();
+            }
             if (game.ended) ctx.globalAlpha = Math.max(0.15, 1 - game.over * 1.5);
             else if (game.invuln > 0 && Math.floor(game.time * 14) % 2) ctx.globalAlpha = 0.45;
+            if (game.time - healAt < 0.4) disc(h.x, h.y, h.r + 9, 'rgba(245,140,192,.35)');
             blob(h.x, h.y, h.r + 2, '#5AA9F0', 1 + 0.06 * Math.sin(game.time * 8));
             ctx.globalAlpha = 1;
+            const radius = 38 + game.orbit * 3;
             for (let k = 0; k < game.orbit; k++) {
-              const a = game.spin + k * Math.PI * 2 / game.orbit, x = h.x + Math.cos(a) * 40, y = h.y + Math.sin(a) * 40;
-              ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ink2('#F58CC0', 2);
-              ctx.beginPath(); ctx.arc(x, y, 3.5, a, a + 4); ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+              const a = game.spin + k * Math.PI * 2 / game.orbit, x = h.x + Math.cos(a) * radius, y = h.y + Math.sin(a) * radius;
+              ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ink2('#F58CC0', 2);
+              ctx.beginPath(); ctx.arc(x, y, 4, a, a + 4); ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffffff'; ctx.stroke();
             }
+            for (const p of parts) { p.t -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.92; p.vy *= 0.92; ctx.globalAlpha = Math.min(1, p.t * 3); disc(p.x, p.y, p.r, p.c); }
+            ctx.globalAlpha = 1; parts = parts.filter(p => p.t > 0);
+            // Damage numbers float up; a critical one is bigger and golden.
+            for (const n of nums) { n.t -= dt; n.y -= (n.crit ? 38 : 30) * dt; ctx.globalAlpha = Math.min(1, n.t * 4); outlined(String(n.v) + (n.crit ? '!' : ''), n.x, n.y, n.heal ? 15 : n.crit ? 24 : 13, n.heal ? '#F58CC0' : n.crit ? '#FFD447' : '#ffffff'); }
+            ctx.globalAlpha = 1; nums = nums.filter(n => n.t > 0);
+            ctx.restore();
+            if (flash[0] > 0) fill(0, 0, W, H, 'rgba(' + flash[1] + ',' + flash[0] * 0.5 + ')');
             // Level bar, then hearts, time and level.
             ctx.beginPath(); ctx.roundRect(10, 10, W - 20, 14, 7); ink2(css(t.card), 2);
             if (game.xp > 0) { ctx.beginPath(); ctx.roundRect(10, 10, Math.max(14, (W - 20) * game.xp / game.need), 14, 7); ink2('#62D3DE', 2); }
             card(10, 32, 92, 30, 15, css(t.card), 3); label('❤ ' + game.hp + '/' + game.maxHp, 56, 48, 16, css(t.text));
             card(W / 2 - 40, 32, 80, 30, 15, css(t.card), 3); label(clock(game.time * 1000), W / 2, 48, 16, css(t.text));
             card(W - 102, 32, 92, 30, 15, css(t.card), 3); label('Lv ' + game.level, W - 56, 48, 16, css(t.text));
-            if (game.time - game.bigAt < 1.6 && !game.ended) outlined('큰 젤리 등장!', W / 2, 96, 28, '#FFD447');
+            // The combo: it grows and changes colour while kills keep coming, and pulses on each one.
+            if (game.combo >= 3 && !game.ended) {
+              const pulse = Math.max(0, 1 - (game.time - comboAt) * 6), size = 18 + Math.min(24, game.combo * 0.45) + pulse * 6;
+              outlined(game.combo + ' 콤보!', W / 2, 90, size, game.combo >= 50 ? '#F58CC0' : game.combo >= 20 ? '#FF9A3D' : '#FFD447');
+              const left = Math.max(0, 1 - (game.time - game.comboAt) / 2.2); fill(W / 2 - 40, 108, 80 * left, 4, css(t.card));
+            }
+            if (!game.ended) {
+              if (game.time - game.waveAt < 1.8) outlined('젤리 떼 습격!', W / 2, 140, 26, '#FF9A3D');
+              else if (game.time - game.bigAt < 1.8) outlined('큰 젤리 등장!', W / 2, 140, 28, '#FFD447');
+            }
             if (stick) {
               const dx = stick.x - stick.ax, dy = stick.y - stick.ay, m = Math.min(34, Math.hypot(dx, dy)), a = Math.atan2(dy, dx);
               ctx.beginPath(); ctx.arc(stick.ax, stick.ay, 36, 0, Math.PI * 2); ctx.lineWidth = 3; ctx.strokeStyle = css(t.line, null, 1, 0.35); ctx.stroke();
@@ -3571,84 +3804,154 @@
             }
             if (game.choices) {
               fill(0, 0, W, H, css(t.ink, null, 1, 0.78));
-              outlined('레벨 업!', W / 2, 78, 34, '#FFD447');
+              outlined('레벨 업!', W / 2, 78 + Math.sin(now / 160) * 3, 34, '#FFD447');
               label('카드를 누르거나 1·2·3 키', W / 2, 114, 15, css(t.text, null, 1, 0.8));
               game.choices.forEach((c, i) => {
                 const r = CARD(i);
                 card(r.x, r.y, r.w, r.h, 20, css(t.card), 4);
                 ctx.beginPath(); ctx.arc(r.x + 28, r.y + 48, 15, 0, Math.PI * 2); ink2(css(t.pick), 2); label(String(i + 1), r.x + 28, r.y + 49, 17, css(t.text));
-                label(c.icon, r.x + 76, r.y + 48, 34, css(t.text));
-                label(c.name, r.x + 108, r.y + 36, 22, css(t.text), 'left'); label(c.desc, r.x + 108, r.y + 66, 15, css(t.text, null, 1, 0.8), 'left');
+                label(c.icon, r.x + 76, r.y + 48, 36, css(t.text));
+                label(c.name, r.x + 108, r.y + 28, 20, css(t.text), 'left');
+                if (c.lv > 1) { card(r.x + r.w - 62, r.y + 12, 50, 22, 11, css(t.accent), 0); label('Lv ' + c.lv, r.x + r.w - 37, r.y + 23, 13, '#ffffff'); }
+                wrap(c.desc, r.w - 124, 14).forEach((line, k, all) => label(line, r.x + 108, r.y + (all.length > 1 ? 54 + k * 19 : 64), 14, css(t.text, null, 1, 0.85), 'left'));
               });
             }
           };
-        } else if (kind === 'stairs') {
-          // Cloud Stairs: the camera follows the climber up a zigzag of cloud blocks; the hero stays at one spot on screen.
-          const HX = 180, HY = 350, DX = 52, DY = 40;
-          let vis = 0, lastCoin = -9, endSeen = false;
-          const act = turn => {
-            if (game.ended) return;
-            const ok = turn ? game.turn() : game.climb();
-            begin(); if (ok) sfx.play(turn ? 'move' : 'tap'); focus();
-          };
-          on(canvas, 'pointerdown', e => { e.preventDefault(); act(toWorld(e).x >= W / 2); });
-          keyDown = (k, repeat) => { if (repeat) return; if (['arrowleft', 'a', ' ', 'enter'].includes(k)) act(false); else if (['arrowright', 'd'].includes(k)) act(true); };
-          // Two big buttons in a bar under the sky.
-          const bar = el('div', 'gfx-arcade-pad');
-          const key = (text, turn) => {
-            const b = button(text, () => {});
-            on(b, 'pointerdown', e => { e.preventDefault(); b.dataset.held = ''; act(turn); });
-            on(b, 'click', e => { if (e.detail === 0) act(turn); });
-            for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) on(b, ev, () => { delete b.dataset.held; });
-            return b;
-          };
-          bar.append(key('⬆ 오르기', false), key('↩ 방향 바꾸기', true)); board.append(bar);
+        } else if (kind === 'bus') {
+          // 사탕 버스: tap a bus with a clear way out and it drives into the first free bay; the queue of jellies boards the
+          // bay buses of their colour. Flat outlined buses on the lot, drawn from the model's timers.
+          const COLORS = ['#F2606B', '#5AA9F0', '#4FC487', '#FFD447', '#A47CF0', '#FF9A3D', '#F58CC0'];
+          const NAMES = ['빨강', '파랑', '초록', '노랑', '보라', '주황', '분홍'];
+          const ANG = [0, Math.PI / 2, Math.PI, -Math.PI / 2], VEC = [[0, -1], [1, 0], [0, 1], [-1, 0]], DIRS = ['위', '오른쪽', '아래', '왼쪽'];
+          const BAY_Y = 30, BAY_H = 76, QY = 142, LOT_T = 168, LOT_B = H - 6;
+          const cl = (v, a, b) => Math.max(a, Math.min(b, v));
+          const S = Math.min(58, Math.floor((W - 28) / game.cols), Math.floor((LOT_B - LOT_T - 14) / game.rows));
+          const LX = (W - S * game.cols) / 2, LY = LOT_T + (LOT_B - LOT_T - S * game.rows) / 2;
+          const BW = (W - 16) / game.nbays, bayX = i => 8 + (i + 0.5) * BW, BAY_C = BAY_Y + BAY_H / 2, bayW = Math.min(46, BW - 14), bayL = BAY_H - 10;
+          let fx = [], lastBoarded = 0, shiftAt = -1e9, lastNow = performance.now();
+          const nextLevel = level => { st.game = newBusGame(Math.random, st.level, level); st.started = 0; st.stopped = 0; st.recorded = false; st.newBest = false; show(mode); };
+          const bar = el('div', 'gfx-arcade-pad'); bar.append(button('⟲ 이 레벨 다시', () => nextLevel(game.level))); board.append(bar);
+          const shown = () => game.ended && game.time - game.endAt > 450;
+          const burst = (x, y, color) => { for (let k = 0; k < 10 && fx.length < 80; k++) { const a = Math.random() * Math.PI * 2, v = 60 + Math.random() * 90; fx.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 50, t: 0.7, c: color }); } };
+          on(canvas, 'pointerdown', e => {
+            e.preventDefault(); focus();
+            if (shown()) return nextLevel(game.won ? game.level + 1 : game.level);
+            const p = toWorld(e), x = Math.floor((p.x - LX) / S), y = Math.floor((p.y - LY) / S), b = x >= 0 && y >= 0 && x < game.cols && y < game.rows ? game.at(x, y) : null;
+            if (!b) return;
+            begin(); sfx.play('tap'); game.tap(b.id);
+          });
+          keyDown = k => { if ((k === ' ' || k === 'enter') && shown()) nextLevel(game.won ? game.level + 1 : game.level); };
           onStep = dt => {
-            game.step(dt); vis += (game.n - vis) * Math.min(1, dt / 1000 * 16);
-            if (game.coinAt !== lastCoin) { lastCoin = game.coinAt; if (game.coins) sfx.play('coin'); }
-            if (game.ended && !endSeen) { endSeen = true; sfx.play('lose'); navigator.vibrate?.(60); finish(false, game.score); }
+            game.step(dt);
+            for (const ev of game.take()) {
+              if (ev === 'nope') sfx.play('nope');
+              else if (ev === 'drive') sfx.play('move');
+              else if (ev === 'board') sfx.play('pop', 1 + game.boarded % 4);
+              else if (ev === 'full') { sfx.play('match'); game.bays.forEach((bay, j) => { if (bay && bay.cheer >= game.CHEER - 60) burst(bayX(j), BAY_C, COLORS[game.buses[bay.bus].colour]); }); }
+              else if (ev === 'win') { sfx.play('win'); st.newBest = saveGameBest(mode + '-' + st.level, game.level, false); for (let k = 0; k < 4; k++) burst(50 + k * 85, 150 + (k % 2) * 50, COLORS[k * 2]); }
+              else if (ev === 'lose') { sfx.play('lose'); navigator.vibrate?.(50); }
+            }
+            if (game.boarded !== lastBoarded) { lastBoarded = game.boarded; shiftAt = performance.now(); }
           };
-          sign = () => [game.n, game.coins, game.started, game.ended && game.clock - game.fail.t > 0.8].join('/');
-          // A cloud: one outline round the union of a pill and two puffs (outline pass, then fill pass on top).
-          const cloud = (x, y, w, color) => {
-            const shape = () => { ctx.beginPath(); ctx.roundRect(x - w / 2, y - 2, w, 20, 10); for (const [dx, dy, r] of [[-w * 0.2, -2, 9], [w * 0.12, -4, 12]]) { ctx.moveTo(x + dx + r, y + dy); ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2); } };
-            shape(); ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.strokeStyle = css(tone().line); ctx.stroke(); ctx.fillStyle = color; ctx.fill();
-            shape(); ctx.fill();
+          sign = () => [game.level, game.left(), game.bays.filter(Boolean).length, game.buses.filter(b => b.state === 'lot').length, game.ended, game.lost, st.newBest].join('/');
+          // The centre and size of a lot bus: the middle of its two cells.
+          const busBox = b => ({ x: LX + (2 * b.x - VEC[b.dir][0] + 1) / 2 * S, y: LY + (2 * b.y - VEC[b.dir][1] + 1) / 2 * S, w: S * 0.72, l: S * 1.86 });
+          const angMix = (a, b, u) => { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return a + d * u; };
+          // A jelly person: an outlined blob with two eyes.
+          const jelly = (x, y, r, color, sy = 1) => {
+            ctx.beginPath(); ctx.ellipse(x, y, r * (2 - sy), r * sy, 0, 0, Math.PI * 2); ink2(color, 2.2);
+            disc(x - r * 0.38, y - r * 0.1, r * 0.25, '#ffffff'); disc(x + r * 0.38, y - r * 0.1, r * 0.25, '#ffffff');
+            disc(x - r * 0.34, y - r * 0.08, r * 0.12, css(tone().line)); disc(x + r * 0.42, y - r * 0.08, r * 0.12, css(tone().line));
+          };
+          // A bus seen from above, its front towards -y before the rotation: wheels, body, windscreen, a roof arrow, seats.
+          const drawBus = (x, y, ang, w, l, color, o = {}) => {
+            const t = tone();
+            ctx.save(); ctx.translate(x, y); ctx.rotate(ang); if (o.scale) ctx.scale(o.scale, o.scale);
+            ctx.fillStyle = css(t.line);
+            for (const sx of [-1, 1]) for (const sy of [-0.28, 0.3]) { ctx.beginPath(); ctx.roundRect(sx * w / 2 - 3.5 + sx * 1.5, sy * l - 7, 7, 14, 2.5); ctx.fill(); }
+            const body = () => { ctx.beginPath(); ctx.roundRect(-w / 2, -l / 2, w, l, w * 0.3); };
+            body(); ink2(color, 3);
+            if (o.flash) { body(); ctx.fillStyle = 'rgba(229,72,77,' + o.flash * 0.55 + ')'; ctx.fill(); }
+            ctx.beginPath(); ctx.roundRect(-w * 0.36, -l / 2 + l * 0.05, w * 0.72, l * 0.13, 4); ink2('rgba(255,255,255,.9)', 1.8);
+            if (o.arrow) {
+              ctx.beginPath(); ctx.moveTo(0, -l * 0.2); ctx.lineTo(w * 0.28, l * 0.02); ctx.lineTo(w * 0.1, l * 0.02); ctx.lineTo(w * 0.1, l * 0.17); ctx.lineTo(-w * 0.1, l * 0.17); ctx.lineTo(-w * 0.1, l * 0.02); ctx.lineTo(-w * 0.28, l * 0.02); ctx.closePath();
+              ink2('#ffffff', 2);
+            }
+            for (let k = 0; k < game.cap; k++) disc((k - (game.cap - 1) / 2) * w * 0.2, l * (o.arrow ? 0.32 : 0.22), w * 0.075, k < (o.filled || 0) ? '#ffffff' : 'rgba(0,0,0,.25)');
+            ctx.restore();
           };
           drawGame = () => {
-            const t = tone(), line = css(t.line);
-            fill(0, 0, W, H, css(t.ink, [191, 230, 255, 1], t.night ? 0.85 : 0.45));
-            for (const [cx, cy, s] of [[60, 70, 1], [290, 180, 0.8], [120, 300, 0.7], [310, 420, 1.1], [40, 470, 0.9]]) {
-              const y = ((cy + vis * 14 * s) % (H + 80) + H + 80) % (H + 80) - 40;
-              ctx.beginPath(); ctx.ellipse(cx, y, 34 * s, 11 * s, 0, 0, Math.PI * 2); ctx.fillStyle = css(t.card, null, 1, 0.55); ctx.fill();
+            const t = tone(), now = performance.now(), dt = Math.min(0.05, (now - lastNow) / 1000); lastNow = now;
+            ground();
+            // The bays, the queue's strip and the lot's mat.
+            label('탑승 칸', 10, 14, 12, css(t.text, null, 1, 0.7), 'left');
+            game.bays.forEach((_, j) => {
+              ctx.beginPath(); ctx.roundRect(bayX(j) - BW / 2 + 3, BAY_Y, BW - 6, BAY_H, 14); ctx.fillStyle = css(t.card, null, 1, 0.5); ctx.fill();
+              ctx.setLineDash([6, 4]); ctx.lineWidth = 2.5; ctx.strokeStyle = css(t.line, null, 1, 0.5); ctx.stroke(); ctx.setLineDash([]);
+            });
+            label('대기 줄 · 남은 ' + game.left() + '명', 10, QY - 25, 12, css(t.text, null, 1, 0.7), 'left');
+            card(6, QY - 17, W - 12, 34, 17, css(t.card, null, 1, 0.8), 0);
+            card(LX - 8, LY - 8, S * game.cols + 16, S * game.rows + 16, 16, css(t.line, t.ink, 0.28), 3);
+            ctx.setLineDash([4, 5]); ctx.lineWidth = 1.5; ctx.strokeStyle = css(t.card, null, 1, 0.4); ctx.beginPath();
+            for (let x = 1; x < game.cols; x++) { ctx.moveTo(LX + x * S, LY + 4); ctx.lineTo(LX + x * S, LY + S * game.rows - 4); }
+            for (let y = 1; y < game.rows; y++) { ctx.moveTo(LX + 4, LY + y * S); ctx.lineTo(LX + S * game.cols - 4, LY + y * S); }
+            ctx.stroke(); ctx.setLineDash([]);
+            // Buses waiting in the lot; one that bumps shakes along its way and blushes.
+            for (const b of game.buses) {
+              if (b.state !== 'lot') continue;
+              const o = busBox(b), u = b.bump / game.BUMP, off = Math.sin(u * 18) * 5 * u;
+              drawBus(o.x + VEC[b.dir][0] * off, o.y + VEC[b.dir][1] * off, ANG[b.dir], o.w, o.l, COLORS[b.colour], { arrow: true, flash: u });
             }
-            // Where the camera is, between two steps.
-            const fl = Math.floor(vis), fr = vis - fl, camX = game.colAt(fl) + (game.colAt(fl + 1) - game.colAt(fl)) * fr;
-            const fall = game.ended ? game.clock - game.fail.t : 0;
-            for (let i = game.n + 9; i >= Math.max(0, game.n - 5); i--) {
-              const x = HX + (game.colAt(i) - camX) * DX, y = HY - (i - vis) * DY;
-              if (y < -30 || y > H + 30) continue;
-              ctx.globalAlpha = i < vis - 3 ? 0.4 : 1;
-              cloud(x, y, i ? 62 : 84, i === game.n ? css(t.card) : css(t.card, [200, 226, 255, 1], 0.8));
-              if (game.hasCoin(i) && i > game.n) { ctx.beginPath(); ctx.arc(x, y - 22, 7, 0, Math.PI * 2); ink2('#FFD447', 2); ctx.beginPath(); ctx.arc(x, y - 22, 3.5, 0, Math.PI * 2); ctx.lineWidth = 1.5; ctx.strokeStyle = line; ctx.stroke(); }
-              ctx.globalAlpha = 1;
+            // Buses in the bays (cheering ones hop), and the ones leaving.
+            game.bays.forEach((bay, j) => {
+              if (!bay || !bay.arrived) return;
+              const full = bay.cheer >= 0, hop = full ? Math.abs(Math.sin(now / 90)) * 6 : 0;
+              drawBus(bayX(j), BAY_C - hop, 0, bayW, bayL, COLORS[game.buses[bay.bus].colour], { filled: bay.n, scale: full ? 1.06 : 1 });
+              if (full) label('만석!', bayX(j), BAY_Y - 5, 13, css(t.accent), 'center');
+            });
+            for (const o of game.leaving) { const u = ease(o.t / game.LEAVE); drawBus(bayX(o.bay), BAY_C - u * (BAY_C + 60), 0, bayW, bayL, COLORS[game.buses[o.bus].colour], { filled: game.cap }); }
+            // Buses on their way: out along their arrow, then round to the bay.
+            game.bays.forEach((bay, j) => {
+              if (!bay || bay.arrived) return;
+              const b = game.buses[bay.bus], o = busBox(b), p = Math.min(1, bay.drive / game.DRIVE), [vx, vy] = VEC[b.dir];
+              const dist = ([b.y, game.cols - 1 - b.x, game.rows - 1 - b.y, b.x][b.dir] + 1.7) * S;
+              const ex = cl(o.x + vx * dist, 16, W - 16), ey = cl(o.y + vy * dist, 20, H - 20);
+              let x, y, ang = ANG[b.dir], w = o.w, l = o.l;
+              if (p < 0.4) { const u = ease(p / 0.4); x = lerp(o.x, ex, u); y = lerp(o.y, ey, u); }
+              else {
+                const u = ease((p - 0.4) / 0.6), bx = bayX(j), cx = ex < W / 2 ? 8 : W - 8, cy = (ey + BAY_C) / 2, v = 1 - u;
+                x = v * v * ex + 2 * v * u * cx + u * u * bx; y = v * v * ey + 2 * v * u * cy + u * u * BAY_C;
+                const tx = 2 * v * (cx - ex) + 2 * u * (bx - cx), ty = 2 * v * (cy - ey) + 2 * u * (BAY_C - cy);
+                ang = angMix(angMix(ang, Math.atan2(tx, -ty), ease(Math.min(1, u * 4))), 0, ease(Math.max(0, (u - 0.6) / 0.4)));
+                w = lerp(o.w, bayW, u); l = lerp(o.l, bayL, u);
+              }
+              drawBus(x, y, ang, w, l, COLORS[b.colour], { arrow: p < 0.4, filled: 0 });
+            });
+            // The queue: the front jelly hops into the bus it boards; the rest slide up.
+            const slide = Math.max(0, 1 - (now - shiftAt) / 180) * 26;
+            game.queue.slice(0, 12).forEach((c, i) => {
+              let x = 24 + i * 26 + slide, y = QY, r = 10, sy = 1;
+              if (i === 0 && game.boarding) {
+                const p = ease(game.boarding.t / game.BOARD), bx = bayX(game.boarding.bay);
+                x = lerp(24, bx, p); y = lerp(QY, BAY_C + 6, p) - Math.sin(Math.PI * p) * 26; r = lerp(10, 8, p); sy = 1 + 0.12 * Math.sin(Math.PI * p);
+              }
+              if (x < W - 10) jelly(x, y, r, COLORS[c], sy);
+            });
+            if (game.queue.length > 12) label('+' + (game.queue.length - 12), W - 24, QY, 13, css(t.text), 'center');
+            for (const f of fx) { f.t -= dt; f.vy += 320 * dt; f.x += f.vx * dt; f.y += f.vy * dt; ctx.globalAlpha = Math.max(0, f.t / 0.7); ctx.beginPath(); ctx.arc(f.x, f.y, 3.5, 0, Math.PI * 2); ink2(f.c, 1.5); }
+            ctx.globalAlpha = 1; fx = fx.filter(f => f.t > 0);
+            if (shown()) {
+              if (game.won) notice([{ text: '레벨 ' + game.level + ' 클리어!', size: 26, color: css(t.accent) }, { text: st.newBest ? '최고 기록이에요!' : '모두 버스를 탔어요', size: 14 }, { text: '탭해서 다음 레벨 ▶', size: 15 }]);
+              else notice([{ text: '자리가 없어요', size: 26, color: '#E5484D' }, { text: '맨 앞 친구가 탈 버스가 칸에 없어요', size: 14 }, { text: '탭해서 이 레벨 다시 ▶', size: 15 }]);
             }
-            // The climber: a round jelly that hops, squashes on landing and looks the way it faces.
-            const hop = Math.sin(Math.PI * Math.min(1, game.n - vis)) * 14, land = game.clock - game.climbAt < 0.1 ? 0.88 : 1;
-            ctx.save();
-            if (game.ended) { ctx.translate(HX + game.fail.dir * 70 * fall, HY - 18 + 520 * fall * fall); ctx.rotate(game.fail.dir * fall * 5); } else ctx.translate(HX, HY - 18 - hop);
-            ctx.beginPath(); ctx.ellipse(0, 0, 14 * (2 - land), 14 * land, 0, 0, Math.PI * 2); ink2('#F58CC0', 2.5);
-            for (const s of [-1, 1]) { disc(s * 5 + game.face * 3, -3, 3.8, '#ffffff'); disc(s * 5 + game.face * 4.6, -3, 1.7, line); }
-            ctx.restore();
-            // Time bar and score.
-            ctx.beginPath(); ctx.roundRect(20, 14, W - 40, 16, 8); ink2(css(t.card), 2);
-            if (game.left > 0) { ctx.beginPath(); ctx.roundRect(20, 14, Math.max(16, (W - 40) * game.left), 16, 8); ink2(game.left < 0.3 ? '#F2606B' : css(t.accent), 2); }
-            ctx.font = font(44); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'; ctx.lineWidth = 8; ctx.strokeStyle = line; ctx.strokeText(String(game.score), W / 2, 76); ctx.fillStyle = '#ffffff'; ctx.fillText(String(game.score), W / 2, 76);
-            if (!game.started) {
-              card(28, H - 130, W - 56, 76, 20, css(t.card), 4);
-              label('왼쪽 탭 · 오르기', W / 2, H - 104, 17, css(t.text));
-              label('오른쪽 탭 · 방향 바꾸기 후 오르기', W / 2, H - 78, 14, css(t.text, null, 1, 0.75));
-            }
+          };
+          paintExtra = () => {
+            const b0 = best();
+            chips([['레벨 ' + game.level], ['👥 ' + game.left() + '명'], b0 != null && ['🏆 레벨 ' + b0]]);
+            info.textContent = game.won ? '다음 레벨로 넘어가려면 화면을 누르세요' : game.lost ? '맨 앞 친구가 탈 버스가 없어요 · 화면을 누르면 다시 해요'
+              : '앞이 뚫린 버스를 눌러 칸으로 보내세요 · 줄 맨 앞 젤리와 같은 색 버스가 필요해요';
+            const lotBuses = game.buses.filter(b => b.state === 'lot');
+            canvas.setAttribute('aria-label', '레벨 ' + game.level + ' · 대기 ' + game.left() + '명 · 맨 앞 ' + (game.queue.length ? NAMES[game.queue[0]] : '없음') + ' · 주차장 버스 ' + lotBuses.map(b => NAMES[b.colour] + ' ' + DIRS[b.dir] + (game.blocker(b.id) ? '(막힘)' : '')).join(', '));
           };
         } else {
           // Count Masters: blue jelly runners on a cream road over a pastel sea; blue gates add, red ones take; then the
@@ -3793,7 +4096,7 @@
           drawGame();
         };
         paint = () => {
-          if (kind === 'water' || kind === 'candy') return paintExtra();
+          if (kind === 'water' || kind === 'candy' || kind === 'bus') return paintExtra();
           const b0 = best();
           if (kind === 'dino') { chips([b0 != null && ['🏆 ' + b0.toLocaleString()]]); info.textContent = '탭·스페이스로 점프(길게 누르면 높이) · ↓나 숙이기로 새를 피해요'; }
           else if (kind === 'dash') {
@@ -3808,10 +4111,6 @@
             chips([['⭐ ' + game.score], ['❤ ' + game.hp + '/' + game.maxHp], b0 != null && ['🏆 ' + b0.toLocaleString()]]);
             info.textContent = '화면을 끌거나 WASD·방향키로 이동 · 공격은 자동 · 레벨 업 카드는 탭이나 1·2·3';
             if (game.ended && game.over > 0.8) showResult('젤리가 녹아 버렸어요', clock(game.time * 1000) + ' 생존 · 처치 ' + game.kills + ' · ' + game.score.toLocaleString() + '점');
-          } else if (kind === 'stairs') {
-            chips([['☁️ ' + game.score + '칸'], ['🪙 ' + game.coins], b0 != null && ['🏆 ' + b0]]);
-            info.textContent = '왼쪽 탭·←·A·스페이스는 오르기, 오른쪽 탭·→·D는 방향 바꾸기 · 시간 막대가 비기 전에 올라가요';
-            if (game.ended && game.clock - game.fail.t > 0.8) showResult(game.fail.why === 'time' ? '시간이 다 됐어요' : '구름을 헛디뎠어요', game.score + '칸 · 코인 ' + game.coins);
           } else {
             chips([['👥 ' + game.count], b0 != null && ['🏆 ' + b0.toLocaleString()]]);
             info.textContent = '좌우로 끌거나 ←→로 이동 · 파란 문으로 인원을 늘리고 장애물과 적 무리를 넘어 계단으로';
@@ -3839,7 +4138,7 @@
       paintNow = (clockOnly) => { if (!content.contains(board)) return; paint(clockOnly); };
       paint();
       // Games played with the keyboard take focus, so arrow and number keys work straight away.
-      if (['merge', 'snake', 'shop', 'pinball', 'bricks', 'drop', 'dino', 'dash', 'water', 'candy', 'knife', 'count', 'survive', 'stairs'].includes(mode)) board.focus({ preventScroll: true });
+      if (['merge', 'snake', 'shop', 'pinball', 'bricks', 'drop', 'dino', 'dash', 'water', 'candy', 'knife', 'count', 'survive', 'bus'].includes(mode)) board.focus({ preventScroll: true });
     }
     return panel;
   }
@@ -3852,17 +4151,17 @@
 .gfx-game-content > .gfx-game-stage { order:1; }
 .gfx-game-content > .gfx-game-info { order:2; margin:8px 0 0; font-size:.85em; opacity:.8; }
 /* Extra games: a wide runner, two portrait arcades and numbered liquid layers. */
-.gfx-game-board:is([data-kind="dino"], [data-kind="dash"], [data-kind="water"], [data-kind="candy"], [data-kind="knife"], [data-kind="count"], [data-kind="survive"], [data-kind="stairs"]) {
+.gfx-game-board:is([data-kind="dino"], [data-kind="dash"], [data-kind="water"], [data-kind="candy"], [data-kind="knife"], [data-kind="count"], [data-kind="survive"], [data-kind="bus"]) {
   display:flex; flex-direction:column; gap:8px; padding:6px; background:color-mix(in srgb,var(--gfx-line, #6B4528) 16%,var(--gfx-ink, #FFF4D9));
 }
-.gfx-game-board:is([data-kind="dino"], [data-kind="dash"], [data-kind="water"], [data-kind="candy"], [data-kind="knife"], [data-kind="count"], [data-kind="survive"], [data-kind="stairs"]) > * {
+.gfx-game-board:is([data-kind="dino"], [data-kind="dash"], [data-kind="water"], [data-kind="candy"], [data-kind="knife"], [data-kind="count"], [data-kind="survive"], [data-kind="bus"]) > * {
   aspect-ratio:auto; place-items:normal; font-size:inherit; line-height:1.3;
 }
 .gfx-game-board .gfx-arcade-canvas { display:block; width:100%; height:auto; box-sizing:border-box; border:2.5px solid var(--gfx-line, #6B4528); border-radius:12px; touch-action:none; cursor:pointer; }
 .gfx-game-board .gfx-arcade-pad { display:flex; gap:6px; border-radius:0; }
 .gfx-arcade-pad button { flex:1; min-height:40px; padding:.4em .6em !important; touch-action:none; font-size:.85em; }
 .gfx-arcade-pad button[data-held] { background:var(--gfx-pick, #FFE17A); translate:0 2px; }
-.gfx-game-board:is([data-kind="dino"], [data-kind="dash"], [data-kind="water"], [data-kind="candy"], [data-kind="knife"], [data-kind="count"], [data-kind="survive"], [data-kind="stairs"]):focus-visible { outline:3px solid var(--gfx-accent, #F0763A); outline-offset:3px; }
+.gfx-game-board:is([data-kind="dino"], [data-kind="dash"], [data-kind="water"], [data-kind="candy"], [data-kind="knife"], [data-kind="count"], [data-kind="survive"], [data-kind="bus"]):focus-visible { outline:3px solid var(--gfx-accent, #F0763A); outline-offset:3px; }
 /* 크게 보기: the column over the whole window (top layer), the page dimmed behind it. */
 :host([data-game-large]) { position:fixed; inset:12px; width:auto; height:auto; max-width:none; max-height:none; margin:0; padding:0; border:0; background:transparent;
   overflow:visible; color:inherit; z-index:2147483000; box-shadow:0 0 0 100vmax rgba(12,10,24,.55); border-radius:24px; }
