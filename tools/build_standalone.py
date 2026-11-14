@@ -62,8 +62,18 @@ MOUNT = r"""
     + " :host(:not([data-menu])) .gfx-game-head > .gfx-game-tools { order:1; flex:0 0 auto; } :host(:not([data-menu])) .gfx-game-head > .gfx-game-stats { flex:0 1 auto; }"
     + " :host(:not([data-menu])) .gfx-game-content { padding-top:6px; } }"
     + "@media (max-width:640px) { :host(:not([data-menu]):not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 112px); } }"
+    // Folded on an upright phone: thinner frames, so the board gets nearly the full width.
+    + "@media (max-width:640px) { :host(:not([data-menu])) .gfx-game-content { padding:4px 4px 6px; border-width:2px; } :host(:not([data-menu])) .gfx-game-board { padding:3px; } }"
+    // Folded on a phone on its side the height is what is short: the title, new game, scores and how-to go into a
+    // narrow column on the left and the board takes the whole height beside it.
     + "@media (orientation:landscape) and (max-height:520px) { :host(:not([data-menu])) .gfx-load-games { gap:0; }"
-    + " :host(:not([data-menu]):not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 88px); } }"
+    + " :host(:not([data-menu])) .gfx-game-content { display:grid; grid-template-columns:128px minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); column-gap:8px; padding:4px 6px 4px 4px; border-width:2px; }"
+    + " :host(:not([data-menu])) .gfx-game-head { grid-column:1; grid-row:1; flex-direction:column; flex-wrap:nowrap; align-items:stretch; gap:5px; margin:0; }"
+    + " :host(:not([data-menu])) .gfx-game-head > .gfx-game-title { white-space:normal; font-size:.95em; } :host(:not([data-menu])) .gfx-game-head > .gfx-game-tools { justify-content:flex-start; }"
+    + " :host(:not([data-menu])) .gfx-game-head > .gfx-game-stats { margin:0; flex-wrap:wrap; justify-content:flex-start; } :host(:not([data-menu])) .gfx-menu-toggle { align-self:flex-start; }"
+    + " :host(:not([data-menu])) .gfx-game-info { grid-column:1; grid-row:2; align-self:start; margin-top:6px; font-size:.72em; line-height:1.35; text-align:left; overflow:hidden; }"
+    + " :host(:not([data-menu])) .gfx-game-stage { grid-column:2; grid-row:1 / span 2; min-height:0; } :host(:not([data-menu])) .gfx-game-board { padding:3px; }"
+    + " :host(:not([data-menu]):not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 30px); } }"
     // Games made for a wide screen ask to turn the phone; 그냥 세로로 dismisses it for this visit.
     + ".gfx-rotate { display:none; position:absolute; inset:var(--nav-h, 90px) 0 0; z-index:3; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:20px; text-align:center;"
     + " background:color-mix(in srgb,var(--gfx-card, #FFFDF5) 96%,transparent); border:3px solid var(--gfx-line, #6B4528); border-radius:18px; }"

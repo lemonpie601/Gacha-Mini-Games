@@ -115,7 +115,7 @@ Kenney의 효과음(CC0, 아래 '에셋 출처')을 씁니다: 버튼·선택은
 
 ## 설치
 
-마리나라 설정의 개인 확장에서 `Gacha-Mini-Games-1.15.0.personal-extension.zip`을 설치합니다.
+마리나라 설정의 개인 확장에서 `Gacha-Mini-Games-1.15.1.personal-extension.zip`을 설치합니다.
 
 생성 화면이 2.5초 이상 이어지면 미니게임이 나타납니다.
 
@@ -125,6 +125,10 @@ Kenney의 효과음(CC0, 아래 '에셋 출처')을 씁니다: 버튼·선택은
 node --test tools/test-loading.mjs tools/test-extra-games.mjs tools/test-difficulty.mjs
 node tools/test-games-browser.mjs  # Windows의 Microsoft Edge 필요
 ```
+
+## 1.15.1
+
+휴대폰에서 게임이 더 크게 보입니다. 가로로 눕히면(메뉴가 접힌 상태) 게임 이름·새 판·점수·설명이 왼쪽 좁은 칸으로 옮겨 가고 게임판이 화면 높이를 다 씁니다(젤리 생존기 같은 세로 게임은 차지하는 면적이 약 1.5배, 좀비 학교 탈출은 약 1.4배). 세로로 들 때도 테두리와 여백을 줄여 게임판이 화면 폭을 거의 다 씁니다.
 
 ## 1.15.0
 
