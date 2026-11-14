@@ -64,7 +64,7 @@
 </head>
 <body>
 <header>
-  <h1>🎮 Gacha Mini Games<small>v1.17.0</small></h1>
+  <h1>🎮 Gacha Mini Games<small>v1.18.0</small></h1>
   <label><span class="tag">테마</span>
     <select id="preset" aria-label="테마">
       <option value="cream">크림 코코아</option>
@@ -85,7 +85,7 @@
 </header>
 <div id="games"></div>
 <script>
-/* Gacha Mini Games v1.17.0 — personal extension for Gacha Forge on Marinara Engine.
+/* Gacha Mini Games v1.18.0 — personal extension for Gacha Forge on Marinara Engine.
  * While a chapter or story is being generated, the generation screen gets a column of small games on its right:
  * 지뢰찾기, 사과 상자 (the fruit follows the 말랑 colour preset), 2048, 짝 맞추기, 쿠키 가게, 디저트 핀볼 and more. Closing the column or
  * finishing generation removes them; nothing here touches the run, rewards or the generation request.
@@ -2543,7 +2543,7 @@
       ] },
     ];
     // The floor: walls everywhere, then rooms, the corridor, doors and furniture carved in.
-    const WALL = 1, FLOOR = 0, HALL = 2, DESK = 3, BED = 4, SHELF = 5, STAIR = 6, DOOR = 7;
+    const WALL = 1, FLOOR = 0, HALL = 2, DESK = 3, BED = 4, SHELF = 5, STAIR = 6, DOOR = 7, PLANT = 8, VEND = 9, PIANO = 10, TEACH = 11;
     const grid = new Uint8Array(COLS * ROWS).fill(WALL);
     const at = (x, y) => x < 0 || y < 0 || x >= COLS || y >= ROWS ? WALL : grid[y * COLS + x];
     const set = (x, y, v) => { if (x > 0 && y > 0 && x < COLS - 1 && y < ROWS - 1) grid[y * COLS + x] = v; };
@@ -2563,10 +2563,13 @@
         else for (let x = x0 + 1; x <= x1 - 1; x += 2) for (const y of fy) set(x, y, DESK);
       }
     });
+    // Props: vending machines, plants and a water fountain along the corridor (never in front of a door), the teacher's
+    // desk under each board, a piano in the music room.
+    for (const [x, y, v] of [[15, 10, VEND], [35, 10, VEND], [5, 10, PLANT], [25, 10, PLANT], [10, 13, PLANT], [30, 13, PLANT], [20, 13, VEND], [38, 13, PLANT], [5, 1, TEACH], [15, 1, TEACH], [25, 1, TEACH], [24, 21, PIANO], [25, 21, PIANO], [26, 21, PIANO]]) set(x, y, v);
     // Doors between neighbouring rooms make loops to run round.
     for (const [x, y] of [[10, 4], [10, 5], [30, 4], [30, 5], [20, 18], [20, 19], [30, 19], [30, 20]]) set(x, y, DOOR);
-    const solid = v => v === WALL || v === DESK || v === BED || v === SHELF;
-    const game = { phase: 'lobby', cls, CLASSES, ZSKILL, COLS, ROWS, grid, ROOMS, WALL, FLOOR, HALL, DESK, BED, SHELF, STAIR, DOOR, at, length, FINALE,
+    const solid = v => v === WALL || v === DESK || v === BED || v === SHELF || v >= PLANT;
+    const game = { phase: 'lobby', cls, CLASSES, ZSKILL, COLS, ROWS, grid, ROOMS, WALL, FLOOR, HALL, DESK, BED, SHELF, STAIR, DOOR, PLANT, VEND, PIANO, TEACH, at, length, FINALE,
       STORY, story: null, ep: -1, si: -1, goal: null, lines: null, li: 0, ents: [], items: [], bars: [], speaker: null, events: [], time: 0, phaseT: 0, left: length, ended: false, won: false, why: '', over: 0,
       infected: 0, escaped: 0, saved: 0, skillsUsed: 0, score: 0, player: null, dx: 0, dy: 0, open: false, nextItem: 6, hostsAt: -1 };
     const emit = (t, x, y, v, extra) => { if (game.events.length < 200) game.events.push({ t, x, y, v, ...extra }); };
@@ -5854,6 +5857,8 @@
           keyUp = k => { held.delete(k); steer(); };
           on(board, 'keydown', e => { if (e.key.toLowerCase() === 'e' && !e.repeat && game.phase !== 'lobby') { e.preventDefault(); doItem(); } });
           release = () => { held.clear(); stick = null; game.aim(0, 0); };
+          // Retry after being caught in the story: the round runs on, its result and experience are counted afresh.
+          st.yajaRetry = () => { if (!game.retry()) return false; endSeen = false; awarded = null; st.stopped = 0; st.recorded = false; sfx.play('level'); return true; };
           const SKILL_SFX = { runner: 'power', taekwon: 'hit', photo: 'flip', nurse: 'clear', science: 'lock', radio: 'bonus', zombie: 'slam' };
           onStep = dt => {
             game.step(dt);
@@ -5892,71 +5897,252 @@
             // The music follows the phase; it fades by itself once the round is over.
             if (!game.ended) sfx.music(game.phase === 'lobby' ? 'lobby' : game.phase === 'scene' ? (game.si === 0 ? 'lobby' : 'count') : game.phase === 'intro' || game.phase === 'count' ? 'count'
               : p.zombie ? 'zombie' : game.open || game.ents.some(e => e.boss && !e.gone) ? 'finale' : 'play');
-            if (game.ended && !endSeen) { endSeen = true; finish(false, game.score); }
+            if (game.ended && !endSeen) { endSeen = true; finish(false, game.story && !game.won ? null : game.score); }
           };
           sign = () => [game.phase, game.humans().length, game.zombies().length, game.ended && game.over > 1].join('/');
           // ---- drawing ----
-          const ROOM_FLOOR = { '보건실': ['#E9EEF2', '#DCE3EA'], '과학실': ['#C9CDD6', '#BDC2CC'], '음악실': ['#B98A5E', '#AE8055'], '도서관': ['#A57A52', '#9B714A'], '교무실': ['#9FA6B8', '#959CAF'] };
+          // ---- the floor, walls, props and people, drawn by hand (no image files) ----
           const roomOf = (x, y) => game.ROOMS.find(r => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1);
-          const floorTile = (x, y, sx, sy) => {
-            const v = game.at(x, y), r = roomOf(x, y);
-            if (v === game.HALL || v === game.DOOR || v === game.STAIR || !r) {
-              fill(sx, sy, T, T, (x + y) & 1 ? '#C8C3B4' : '#BEB8A8');
-              if (v === game.STAIR) { for (let k = 0; k < 4; k++) fill(sx + 3, sy + 3 + k * 8, T - 6, 5, game.open ? '#8BE36B' : '#8E8A80'); }
-              if (v === game.DOOR) fill(sx, sy, T, 3, 'rgba(60,40,20,.35)');
+          const hash = (x, y, k = 0) => ((Math.imul(x + 31 * k, 73856093) ^ Math.imul(y + 17 * k, 19349663)) >>> 0) % 1000 / 1000;
+          const HWALL = 22;
+          // The floor never changes, so it is painted once into its own canvas: planks, terrazzo, tiles, carpet, a rug,
+          // moonlight under the windows and the room names.
+          let floorPic = null;
+          const paintFloor = () => {
+            const c = document.createElement('canvas'); c.width = game.COLS * T; c.height = game.ROWS * T; const f = c.getContext('2d');
+            const R = (x, y, w, h, col) => { f.fillStyle = col; f.fillRect(x, y, w, h); };
+            for (let y = 0; y < game.ROWS; y++) for (let x = 0; x < game.COLS; x++) {
+              const v = game.at(x, y); if (v === game.WALL) continue;
+              const sx = x * T, sy = y * T, r = roomOf(x, y), h1 = hash(x, y);
+              if (!r) {
+                // Corridor terrazzo, darker along the walls, a grout line and specks; the door sills.
+                R(sx, sy, T, T, (x + y) & 1 ? '#CDC7B5' : '#C5BFAC');
+                for (let k = 0; k < 5; k++) R(sx + hash(x, y, k) * (T - 2), sy + hash(y, x, k) * (T - 2), 2, 2, k & 1 ? 'rgba(90,80,60,.25)' : 'rgba(255,255,255,.35)');
+                R(sx, sy, T, 1, 'rgba(110,100,80,.35)'); R(sx, sy, 1, T, 'rgba(110,100,80,.35)');
+                if (game.at(x, y - 1) === game.WALL) R(sx, sy, T, 5, 'rgba(70,60,50,.25)');
+                if (game.at(x, y + 1) === game.WALL) R(sx, sy + T - 4, T, 4, 'rgba(70,60,50,.18)');
+                if (v === game.DOOR) { R(sx, sy + T / 2 - 2, T, 4, '#9C978C'); R(sx, sy + T / 2 - 2, T, 1, '#C9C4B8'); }
+                continue;
+              }
+              if (r.name === '보건실' || r.name === '과학실') {
+                const [a, g2] = r.name === '보건실' ? ['#EEF2F6', '#CBD5DF'] : ['#C7CCD4', '#A6ADB8'];
+                R(sx, sy, T, T, a); R(sx + 16, sy, 1, T, g2); R(sx, sy + 16, T, 1, g2); R(sx, sy, 1, T, g2); R(sx, sy, T, 1, g2);
+              } else if (r.name === '음악실') {
+                R(sx, sy, T, T, '#8A3A47'); if ((x + y) % 2 === 0) { f.fillStyle = 'rgba(255,210,150,.18)'; f.beginPath(); f.arc(sx + 17, sy + 17, 4, 0, Math.PI * 2); f.fill(); }
+              } else if (r.name === '교무실') {
+                R(sx, sy, T, T, (x + y) & 1 ? '#7E8699' : '#767E91'); R(sx, sy, T, 1, 'rgba(0,0,0,.12)'); R(sx, sy, 1, T, 'rgba(0,0,0,.12)');
+              } else {
+                // Planks: two to a tile, staggered seams, each its own shade, a grain line.
+                const dark = r.name === '도서관';
+                for (const k of [0, 1]) {
+                  const shade = hash(x, y, k), base = dark ? ['#8E6642', '#86603E', '#956C47'] : ['#C08F5D', '#B88757', '#C99866'];
+                  R(sx, sy + k * 17, T, 17, base[Math.floor(shade * 3)]);
+                  R(sx, sy + k * 17 + 16, T, 1, dark ? 'rgba(60,35,18,.55)' : 'rgba(120,80,45,.45)');
+                  R(sx + 3, sy + k * 17 + 6 + shade * 6, T - 8, 1, 'rgba(90,60,30,.18)');
+                  if (hash(y, x, k + 5) > 0.55) { const seam = Math.floor(hash(y, x, k) * T); R(sx + seam, sy + k * 17, 1, 16, dark ? 'rgba(60,35,18,.4)' : 'rgba(120,80,45,.35)'); }
+                }
+              }
+              void h1;
+            }
+            // The library's rug; moonlight under the top rooms' windows.
+            const lib = game.ROOMS.find(r => r.name === '도서관');
+            f.fillStyle = '#3E6B5A'; f.fillRect((lib.x0 + 2) * T, (lib.y0 + 5) * T + 8, (lib.x1 - lib.x0 - 3) * T, T + 14); f.strokeStyle = '#D9C27A'; f.lineWidth = 3; f.strokeRect((lib.x0 + 2) * T + 5, (lib.y0 + 5) * T + 13, (lib.x1 - lib.x0 - 3) * T - 10, T + 4);
+            for (const r of game.ROOMS) if (r.top) for (let x = r.x0; x <= r.x1; x++) if (x % 3 !== 1) { f.fillStyle = 'rgba(160,180,255,.10)'; f.beginPath(); f.moveTo(x * T + 4, T); f.lineTo(x * T + 28, T); f.lineTo(x * T + 40, T * 2.6); f.lineTo(x * T + 16, T * 2.6); f.closePath(); f.fill(); }
+            f.textAlign = 'left'; f.textBaseline = 'middle'; f.font = font(16);
+            for (const r of game.ROOMS) { f.fillStyle = 'rgba(40,25,15,.32)'; f.fillText(r.name, (r.x0 + 0.4) * T, (r.top ? r.y1 + 0.5 : r.y1 + 0.5) * T); }
+            return c;
+          };
+          // Ceiling lights: warm pools down the corridor and one over each room; some of them flicker.
+          const LIGHTS = [4, 12, 20, 28, 36].map(x => ({ x, y: 11.8, r: 110 })).concat(game.ROOMS.map(r => ({ x: (r.x0 + r.x1 + 1) / 2, y: (r.y0 + r.y1 + 1) / 2, r: 140 })));
+          const lights = () => {
+            ctx.save(); ctx.globalCompositeOperation = 'lighter';
+            LIGHTS.forEach((l, i) => {
+              const sx = l.x * T - camX, sy = l.y * T - camY; if (sx < -l.r || sx > W + l.r || sy < -l.r || sy > H + l.r) return;
+              if (i % 4 === 1 && Math.sin(game.phaseT * 13 + i) > 0.82) return;
+              const g3 = ctx.createRadialGradient(sx, sy, 6, sx, sy, l.r); g3.addColorStop(0, 'rgba(255,226,170,.20)'); g3.addColorStop(1, 'rgba(255,226,170,0)');
+              ctx.fillStyle = g3; ctx.fillRect(sx - l.r, sy - l.r, l.r * 2, l.r * 2);
+            });
+            ctx.restore();
+          };
+          const box3 = (x, y, w, h, top, front, depth = 6) => { fill(x, y, w, h, top); fill(x, y + h, w, depth, front); ctx.strokeStyle = 'rgba(20,14,24,.55)'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h + depth - 1); };
+          const furniture = (x, y, sx, sy) => {
+            const v = game.at(x, y), r = roomOf(x, y), room = r ? r.name : '';
+            if (v === game.DESK) {
+              if (room === '과학실') { box3(sx + 2, sy + 6, T - 4, 16, '#33363F', '#1E2027', 7); disc(sx + 10, sy + 12, 3.5, '#62D3DE'); fill(sx + 20, sy + 7, 5, 9, 'rgba(180,240,140,.85)'); fill(sx + 20, sy + 7, 5, 2, '#E8F4E8'); return; }
+              fill(sx + 9, sy + 22, T - 18, 9, '#5A7FC0'); fill(sx + 9, sy + 22, T - 18, 2, '#86A6DA'); fill(sx + 10, sy + 31, 2, 3, '#555'); fill(sx + T - 12, sy + 31, 2, 3, '#555');
+              box3(sx + 4, sy + 5, T - 8, 12, '#DDB077', '#9C6C3F', 5); fill(sx + 6, sy + 22, 2, 6, '#666'); fill(sx + T - 8, sy + 22, 2, 6, '#666');
+              if (room === '음악실') { fill(sx + 10, sy + 7, 12, 8, '#F8F4EA'); for (let k = 0; k < 3; k++) fill(sx + 11, sy + 9 + k * 2, 10, 0.8, '#555'); }
+              else if (hash(x, y) > 0.6) { fill(sx + 9, sy + 7, 9, 7, ['#E5484D', '#5AA9F0', '#4FC487'][Math.floor(hash(y, x) * 3)]); }
+            } else if (v === game.TEACH) {
+              box3(sx - 6, sy + 4, T + 12, 15, '#7A4E2C', '#55361E', 8); fill(sx - 2, sy + 6, 11, 8, '#F4F0E6'); fill(sx + 12, sy + 6, 8, 10, '#3E7CC9'); disc(sx + 26, sy + 10, 3.5, '#D9333F'); fill(sx + 26, sy + 5, 1, 3, '#4A7A30');
+            } else if (v === game.BED) {
+              box3(sx + 2, sy + 2, T - 4, T - 10, '#F7F8FB', '#C9CED8', 6); fill(sx + 2, sy + 2, T - 4, 8, '#BFD9F2'); fill(sx + 5, sy + 4, T - 10, 5, '#ffffff');
+              fill(sx + 2, sy + 13, T - 4, 2, '#9EC3E6'); fill(sx + 2, sy + 18, T - 4, 2, '#9EC3E6');
+            } else if (v === game.SHELF) {
+              if (room === '교무실') {
+                box3(sx + 1, sy + 8, T - 2, 14, '#8C93A6', '#5D6375', 7);
+                fill(sx + 8, sy - 4, 18, 13, '#20232C'); fill(sx + 10, sy - 2, 14, 9, game.phase === 'lobby' ? '#3D5470' : 'rgba(127,211,255,' + (0.6 + Math.sin(game.phaseT * 2 + x) * 0.2) + ')'); fill(sx + 15, sy + 9, 4, 2, '#20232C');
+                fill(sx + 3, sy + 12, 8, 6, '#F4F0E6');
+              } else {
+                fill(sx + 1, sy - 14, T - 2, T + 8, '#6B4528'); fill(sx + 1, sy - 14, T - 2, 3, '#8A5F38');
+                const C = ['#E5484D', '#5AA9F0', '#FFD447', '#4FC487', '#A47CF0', '#F58CC0'];
+                for (const row of [0, 1, 2]) for (let k = 0; k < 6; k++) { const hh = 7 + hash(x + k, row) * 3; fill(sx + 3 + k * 5, sy - 11 + row * 11 + (10 - hh), 4, hh, C[Math.floor(hash(x * 7 + k, y + row) * 6)]); }
+                for (const row of [1, 2]) fill(sx + 1, sy - 14 + row * 11, T - 2, 1.5, '#4A2E18');
+              }
+            } else if (v === game.PLANT) {
+              fill(sx + 10, sy + 14, 14, 14, '#C2703D'); fill(sx + 9, sy + 13, 16, 3, '#D9874F');
+              for (const [dx, dy, rr] of [[-6, -2, 7], [6, -3, 7], [0, -9, 8], [-2, 3, 6], [5, 4, 6]]) disc(sx + 17 + dx, sy + 8 + dy, rr, rr > 7 ? '#3E9A5A' : '#52B26B');
+              disc(sx + 14, sy + 0, 2, 'rgba(255,255,255,.35)');
+            } else if (v === game.VEND) {
+              if (y === 13) { box3(sx + 6, sy + 2, T - 12, 16, '#C9CED6', '#8E949E', 10); disc(sx + 17, sy + 9, 4, '#7FB8E8'); fill(sx + 16, sy + 3, 2, 4, '#E8EEF4'); return; }
+              const body = x < 30 ? '#C8323C' : '#2F6FC0';
+              fill(sx + 2, sy - 26, T - 4, T + 26, body); fill(sx + 2, sy - 26, T - 4, 4, 'rgba(255,255,255,.25)');
+              fill(sx + 5, sy - 21, T - 14, 26, 'rgba(255,245,200,.92)');
+              const CAN = ['#E5484D', '#FFD447', '#4FC487', '#5AA9F0'];
+              for (let row = 0; row < 3; row++) for (let k = 0; k < 4; k++) fill(sx + 7 + k * 5, sy - 19 + row * 8, 3.5, 6, CAN[(k + row) % 4]);
+              fill(sx + T - 9, sy - 18, 4, 10, '#20232C'); fill(sx + 6, sy + 10, T - 12, 6, '#20232C');
+              ctx.save(); ctx.globalCompositeOperation = 'lighter'; const gl = ctx.createRadialGradient(sx + 17, sy, 2, sx + 17, sy, 40); gl.addColorStop(0, x < 30 ? 'rgba(255,120,110,.25)' : 'rgba(120,170,255,.25)'); gl.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = gl; ctx.fillRect(sx - 23, sy - 40, 80, 80); ctx.restore();
+            } else if (v === game.PIANO) {
+              const left = game.at(x - 1, y) !== game.PIANO, right = game.at(x + 1, y) !== game.PIANO;
+              fill(sx, sy - 10, T, 22, '#1C1C24'); fill(sx, sy - 10, T, 3, '#3A3A48');
+              fill(sx, sy + 12, T, 9, '#F7F5EE'); for (let k = 0; k < 6; k++) if (k % 3 !== 2) fill(sx + 3 + k * 5.5, sy + 12, 3, 5, '#1C1C24');
+              if (left) fill(sx, sy - 10, 3, 32, '#0F0F15'); if (right) fill(sx + T - 3, sy - 10, 3, 32, '#0F0F15');
+              if (!left && !right) { fill(sx + 6, sy - 6, T - 12, 10, '#F8F4EA'); for (let k = 0; k < 3; k++) fill(sx + 8, sy - 4 + k * 3, T - 16, 0.8, '#555'); }
+            }
+          };
+          // Walls stand 22 px tall: a dark top, and a face toward the room or the corridor below it, with what hangs
+          // there: lockers, posters and class signs in the corridor; blackboards, windows and charts in the rooms.
+          const FACE_COL = { '보건실': ['#BFD2DC', '#7C93A3'], '과학실': ['#A9B6BD', '#5F6E78'], '음악실': ['#B597A6', '#6E4A5C'], '도서관': ['#9C866C', '#5E4A35'], '교무실': ['#A5ADBE', '#5D6577'] };
+          const wall = (x, y, sx, sy) => {
+            const below = game.at(x, y + 1), above = game.at(x, y - 1);
+            fill(sx, sy - HWALL, T, T, '#2D3256'); if (above !== game.WALL) fill(sx, sy - HWALL, T, 3, '#4A5288');
+            if (game.at(x - 1, y) !== game.WALL) fill(sx, sy - HWALL, 2, T, '#3D4470'); if (game.at(x + 1, y) !== game.WALL) fill(sx + T - 2, sy - HWALL, 2, T, '#22264A');
+            if (below === game.WALL) return;
+            const fy = sy + T - HWALL, r = roomOf(x, y + 1), hall = !r;
+            const [up, low] = hall ? ['#9A96B2', '#4E4766'] : FACE_COL[r.name] || ['#B3A48C', '#5E4A3A'];
+            fill(sx, fy, T, HWALL, up); fill(sx, fy + HWALL - 8, T, 8, low); fill(sx, fy + HWALL - 9, T, 1, 'rgba(255,255,255,.25)');
+            if (hall) {
+              // Corridor side: lockers, now and then a poster or a fire alarm; the class sign beside a front door.
+              const doorNear = game.at(x - 1, y) === game.DOOR || game.at(x + 1, y) === game.DOOR;
+              const top = game.ROOMS.find(rm => rm.top && x === rm.x0);
+              if (top && y === 9) { fill(sx + 3, fy + 2, T - 6, 9, '#F4F0E6'); ctx.strokeStyle = '#3A3F66'; ctx.lineWidth = 1; ctx.strokeRect(sx + 3.5, fy + 2.5, T - 7, 8); label(top.name, sx + T / 2, fy + 7, 8, '#2A2F55'); }
+              else if (x % 7 === 3) { fill(sx + 6, fy + 1, T - 12, 12, ['#F2A65A', '#7FC8A9', '#E58FB0'][x % 3]); fill(sx + 9, fy + 4, T - 18, 2, 'rgba(255,255,255,.7)'); fill(sx + 9, fy + 8, T - 22, 2, 'rgba(255,255,255,.5)'); }
+              else if (x % 11 === 5) { fill(sx + 13, fy + 3, 8, 8, '#D9333F'); disc(sx + 17, fy + 7, 2, '#FFD9D9'); }
+              else if (!doorNear) { fill(sx + 2, fy + 1, T - 4, HWALL - 9, '#6C7DA6'); fill(sx + T / 2, fy + 1, 1, HWALL - 9, '#4E5C80'); for (let k = 0; k < 3; k++) { fill(sx + 5, fy + 3 + k * 2, 8, 1, '#4E5C80'); fill(sx + T / 2 + 4, fy + 3 + k * 2, 8, 1, '#4E5C80'); } fill(sx + T / 2 - 4, fy + 8, 2, 3, '#C9D0E0'); fill(sx + T / 2 + 2, fy + 8, 2, 3, '#C9D0E0'); }
               return;
             }
-            const [a, b] = ROOM_FLOOR[r.name] || ['#C29468', '#B98B60'];
-            fill(sx, sy, T, T, y & 1 ? a : b); fill(sx, sy + T - 1, T, 1, 'rgba(0,0,0,.08)');
+            // Room side: the board over the teacher's desk, windows on the outer wall, the room's own chart.
+            const boardX = r.top ? r.x0 + 2 <= x && x <= r.x0 + 6 : r.x0 + 2 <= x && x <= r.x0 + 6;
+            const classroom = /반$/.test(r.name);
+            if (boardX && (classroom || !r.top)) {
+              const color = r.name === '과학실' ? '#F4F0E6' : r.name === '음악실' ? '#F4F0E6' : r.name === '보건실' ? '#E9F1F6' : r.name === '도서관' ? '#7A4E2C' : '#2F5D48';
+              fill(sx, fy + 1, T, HWALL - 10, color); fill(sx, fy, T, 2, '#8A6A44'); fill(sx, fy + HWALL - 10, T, 2, '#8A6A44');
+              if (color === '#2F5D48') { if (x === r.x0 + 3) label('자습', sx + T / 2, fy + 7, 9, 'rgba(255,255,255,.75)'); if (x === r.x0 + 5) { fill(sx + 6, fy + 5, 14, 1, 'rgba(255,255,255,.6)'); fill(sx + 6, fy + 8, 10, 1, 'rgba(255,255,255,.5)'); } }
+              else if (r.name === '음악실') for (let k = 0; k < 4; k++) fill(sx, fy + 3 + k * 2, T, 0.8, '#555');
+              else if (r.name === '과학실') for (let k = 0; k < 4; k++) fill(sx + 2 + k * 8, fy + 3, 6, 6, ['#E5484D', '#FFD447', '#4FC487', '#5AA9F0'][(k + x) % 4]);
+              else if (r.name === '보건실') { fill(sx + 14, fy + 2, 6, 9, '#D9333F'); fill(sx + 12, fy + 4, 10, 5, '#D9333F'); }
+              else if (r.name === '도서관' && x === r.x0 + 4) label('조용히', sx + T / 2, fy + 6, 8, '#F4E2C0');
+              return;
+            }
+            if (y === 0) {
+              fill(sx + 3, fy + 1, T - 6, HWALL - 10, '#1E2A55'); fill(sx + 3, fy + 1, T - 6, 3, '#34478A');
+              fill(sx + T / 2 - 1, fy + 1, 2, HWALL - 10, '#C9C4D8'); fill(sx + 3, fy + 6, T - 6, 1.5, '#C9C4D8');
+              if (x === 7 || x === 27) disc(sx + 10, fy + 5, 3, '#FFF3C4');
+              return;
+            }
+            if (x === r.x1 - 1 && !r.top) { disc(sx + T / 2, fy + 7, 5, '#F4F0E6'); ctx.strokeStyle = '#3A3F66'; ctx.lineWidth = 1.2; ctx.stroke(); fill(sx + T / 2, fy + 4, 1, 3, '#2A2F55'); fill(sx + T / 2, fy + 7, 3, 1, '#2A2F55'); }
           };
-          const furniture = (x, y, sx, sy) => {
-            const v = game.at(x, y);
-            if (v === game.DESK) { fill(sx + 4, sy + 14, T - 8, 6, '#6E4B2E'); fill(sx + 3, sy + 4, T - 6, 12, '#D9A86C'); fill(sx + 3, sy + 4, T - 6, 2, '#F0C48A'); fill(sx + 9, sy + 22, T - 18, 9, '#7C8AA3'); }
-            else if (v === game.BED) { fill(sx + 2, sy + 2, T - 4, T - 4, '#F7F7FA'); fill(sx + 2, sy + 2, T - 4, 9, '#BFD6EF'); ctx.strokeStyle = '#8A97A8'; ctx.lineWidth = 1.5; ctx.strokeRect(sx + 2, sy + 2, T - 4, T - 4); }
-            else if (v === game.SHELF) { fill(sx + 1, sy - 8, T - 2, T + 4, '#6B4A2E'); const C = ['#E5484D', '#5AA9F0', '#FFD447', '#4FC487', '#A47CF0']; for (let k = 0; k < 6; k++) fill(sx + 3 + k * 5, sy - 5 + (k % 2) * 2, 4, 12, C[(x * 3 + k) % 5]); for (let k = 0; k < 6; k++) fill(sx + 3 + k * 5, sy + 11, 4, 12, C[(y + k) % 5]); }
-          };
-          const wall = (x, y, sx, sy) => {
-            const below = game.at(x, y + 1) === game.WALL;
-            fill(sx, sy - 12, T, T, '#3A3F66'); fill(sx, sy - 12, T, 2, '#525A8C');
-            if (!below) { fill(sx, sy + T - 12, T, 12, '#272B4A'); fill(sx, sy + T - 5, T, 1, '#1D2038'); }
+          // A door in a wall row: the lintel over it and the frame at its sides.
+          const doorFrame = (x, y, sx, sy) => {
+            if (game.at(x, y - 1) !== game.WALL && game.at(x, y + 1) !== game.WALL) {
+              // a door between two rooms (in a side wall): only posts above and below
+              if (game.at(x - 1, y) === game.WALL) fill(sx - 3, sy - HWALL, 3, T + HWALL - 10, '#6E4A2E');
+              return;
+            }
+            fill(sx, sy - HWALL, T, 6, '#2D3256'); fill(sx, sy - HWALL + 5, T, 3, '#6E4A2E');
+            if (game.at(x - 1, y) !== game.DOOR) fill(sx, sy - HWALL + 5, 3, HWALL + T - 12, '#6E4A2E');
+            if (game.at(x + 1, y) !== game.DOOR) fill(sx + T - 3, sy - HWALL + 5, 3, HWALL + T - 12, '#6E4A2E');
           };
           const HAIR = ['#2B1E16', '#5A3A24', '#1E1E2A', '#8A5A2B', '#B2733F'], CLUB = { runner: '#FF9A3D', taekwon: '#F2F2F2', science: '#62D3DE', nurse: '#F58CC0', radio: '#A47CF0', photo: '#FFD447' };
-          const person = e => {
-            const sx = e.x * T - camX, sy = e.y * T - camY, bob = Math.sin(e.walk * 5) * 1.6, shakeX = e.turning > 0 ? (Math.random() - 0.5) * 3 : 0;
-            const z = e.zombie || (e.turning > 0 && Math.floor(game.phaseT * 12) % 2);
-            ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(sx, sy + 2, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
-            const x = sx + shakeX, y = sy + bob * 0.3, back = Math.sin(e.face) < -0.55 && !e.lost;
-            if (e.boss) { ctx.save(); ctx.translate(x, y); ctx.scale(1.35, 1.35); ctx.translate(-x, -y); }
-            if (e.imm > 0) { ctx.beginPath(); ctx.arc(x, y - 14, 19, 0, Math.PI * 2); ctx.fillStyle = 'rgba(139,227,245,.22)'; ctx.fill(); ctx.strokeStyle = 'rgba(139,227,245,.8)'; ctx.lineWidth = 1.5; ctx.stroke(); }
-            if (e.host) { ctx.beginPath(); ctx.arc(x, y - 12, 17, 0, Math.PI * 2); ctx.fillStyle = 'rgba(229,72,77,.22)'; ctx.fill(); }
-            // legs, body, arms, head
-            const leg = Math.sin(e.walk * 9) * 3;
-            fill(x - 5, y - 6, 3, 6 + leg * 0.4, '#23243A'); fill(x + 2, y - 6, 3, 6 - leg * 0.4, '#23243A');
-            ctx.beginPath(); ctx.roundRect(x - 7, y - 18, 14, 13, 4); ctx.fillStyle = z ? '#5E6B4E' : '#2E3A6B'; ctx.fill();
-            if (!z && !back) { fill(x - 1.5, y - 17, 3, 8, CLUB[e.cls] || '#ffffff'); }
-            if (back && !z) { ctx.beginPath(); ctx.roundRect(x - 6, y - 17, 12, 10, 3); ctx.fillStyle = CLUB[e.cls] || '#ffffff'; ctx.fill(); fill(x - 6, y - 14, 12, 1.5, 'rgba(0,0,0,.25)'); }
-            if (e.boss) { fill(x - 1.5, y - 17, 3, 9, '#7A1E24'); }
-            else { const fx = Math.cos(e.face) * 9, fy = Math.sin(e.face) * 4; ctx.strokeStyle = '#8DBF6A'; ctx.lineWidth = 3.2; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x - 5, y - 14); ctx.lineTo(x - 5 + fx, y - 14 + fy); ctx.moveTo(x + 5, y - 14); ctx.lineTo(x + 5 + fx, y - 14 + fy); ctx.stroke(); ctx.lineCap = 'butt'; }
-            const hy = y - 25;
-            disc(x, hy, 9, z ? '#9CCB78' : '#F6D7B8');
-            ctx.beginPath(); ctx.arc(x, hy - 1, 9.5, Math.PI * 1.05, Math.PI * 1.95); ctx.lineWidth = 5; ctx.strokeStyle = z ? '#3F4A33' : HAIR[e.hair]; ctx.stroke();
-            const look = Math.cos(e.face) * 2;
-            if (back) { disc(x, hy - 0.5, 9.3, z ? '#3F4A33' : (e.boss ? '#9A9A9A' : HAIR[e.hair])); if (z) { disc(x - 3, hy + 3, 2.5, '#9CCB78'); disc(x + 4, hy - 2, 2, '#9CCB78'); } }
+          const INK = '#2A1E2E';
+          // A chibi student at the origin, feet at (0, 0), about 46 px tall. o: hair colour and style (0 short, 1 long,
+          // 2 bob, 3 ponytail, 4 tuft), club colour, skirt, zombie, back view, walk phase, look (-1..1), boss.
+          const chibi = o => {
+            const z = o.zombie, skin = z ? '#A6CF8C' : '#F8DCC2', hairC = z ? '#4C5A44' : o.boss ? '#A8A8A8' : o.hair, leg = Math.sin(o.walk * 9) * 2.2;
+            ctx.lineJoin = 'round'; ctx.lineWidth = 1.4; ctx.strokeStyle = INK;
+            const shape = (fn, color) => { ctx.beginPath(); fn(); ctx.fillStyle = color; ctx.fill(); ctx.stroke(); };
+            // legs and shoes
+            shape(() => ctx.roundRect(-6, -10, 4.5, 9 + leg * 0.5, 2), o.skirt && !z ? '#F3E9E0' : '#3A3D56');
+            shape(() => ctx.roundRect(1.5, -10, 4.5, 9 - leg * 0.5, 2), o.skirt && !z ? '#F3E9E0' : '#3A3D56');
+            shape(() => ctx.ellipse(-3.8, 0, 3.6, 2.2, 0, 0, Math.PI * 2), '#2A2A36'); shape(() => ctx.ellipse(3.8, 0, 3.6, 2.2, 0, 0, Math.PI * 2), '#2A2A36');
+            // back hair for long styles
+            if (o.style === 1 && !o.back) shape(() => ctx.roundRect(-11, -36, 22, 20, 6), hairC);
+            // body: the blazer, collar, tie or ribbon in the club colour, a skirt or not; the backpack from behind
+            shape(() => ctx.roundRect(-8.5, -22, 17, 14, 5), z ? '#6D7A5C' : o.boss ? '#4A4038' : '#2E3A6B');
+            if (o.skirt && !z) shape(() => { ctx.moveTo(-9, -11); ctx.lineTo(9, -11); ctx.lineTo(11, -5); ctx.lineTo(-11, -5); ctx.closePath(); }, '#7A3A4E');
+            if (o.back) { if (!z) shape(() => ctx.roundRect(-7, -21, 14, 12, 4), o.club); }
             else {
-              disc(x - 3 + look, hy + 1, 1.7, z ? '#E5484D' : '#2B1E16'); disc(x + 3 + look, hy + 1, 1.7, z ? '#E5484D' : '#2B1E16');
-              if (z) fill(x - 3, hy + 5, 6, 1.5, '#4A2020');
-              if (e.boss) { ctx.strokeStyle = '#2B1E16'; ctx.lineWidth = 1.2; ctx.strokeRect(x - 6 + look, hy - 1, 5, 4); ctx.strokeRect(x + 1 + look, hy - 1, 5, 4); }
+              ctx.beginPath(); ctx.moveTo(-4, -22); ctx.lineTo(0, -16); ctx.lineTo(4, -22); ctx.closePath(); ctx.fillStyle = z ? '#B9B49A' : '#F7F7F7'; ctx.fill();
+              if (!z) { ctx.beginPath(); ctx.moveTo(-2, -19); ctx.lineTo(2, -19); ctx.lineTo(1, -12); ctx.lineTo(-1, -12); ctx.closePath(); ctx.fillStyle = o.boss ? '#7A1E24' : o.club; ctx.fill(); }
+              else { disc(-3, -13, 2.2, '#7A2E2E'); disc(4, -17, 1.6, '#7A2E2E'); }
             }
-            if (e.stun > 0) for (let k = 0; k < 3; k++) { const a = game.phaseT * 6 + k * 2.1; label('✦', x + Math.cos(a) * 11, hy - 11 + Math.sin(a) * 3, 9, '#FFE27A'); }
-            if (e.fast > 0) { ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1.5; for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(x - Math.cos(e.face) * 12, y - 18 + k * 6); ctx.lineTo(x - Math.cos(e.face) * 22, y - 18 + k * 6); ctx.stroke(); } }
-            // The name tag: level and name, gold for the player, red for the hosts.
+            // arms: swinging, or reaching out for a zombie
+            if (z) { const ax = Math.cos(o.dir) * 9, ay = Math.sin(o.dir) * 3; ctx.lineCap = 'round'; ctx.lineWidth = 5; ctx.strokeStyle = INK; ctx.beginPath(); ctx.moveTo(-7, -19); ctx.lineTo(-7 + ax, -19 + ay); ctx.moveTo(7, -19); ctx.lineTo(7 + ax, -19 + ay); ctx.stroke(); ctx.lineWidth = 3; ctx.strokeStyle = skin; ctx.stroke(); ctx.lineCap = 'butt'; ctx.lineWidth = 1.4; ctx.strokeStyle = INK; }
+            else { shape(() => ctx.roundRect(-11.5, -20 + leg * 0.4, 4, 9, 2), z ? '#6D7A5C' : '#2E3A6B'); shape(() => ctx.roundRect(7.5, -20 - leg * 0.4, 4, 9, 2), z ? '#6D7A5C' : '#2E3A6B'); }
+            // head, tilted a little for a zombie
+            ctx.save(); ctx.translate(0, -32); if (z) ctx.rotate(Math.sin(o.walk * 3) * 0.12);
+            shape(() => ctx.arc(0, 0, 11.5, 0, Math.PI * 2), o.back ? hairC : skin);
+            if (o.back) {
+              if (o.style === 1) shape(() => ctx.roundRect(-10.5, 0, 21, 14, 5), hairC);
+              if (o.style === 3) shape(() => ctx.ellipse(0, 9, 4, 6, 0, 0, Math.PI * 2), hairC);
+              ctx.beginPath(); ctx.arc(-3, -5, 4, Math.PI, Math.PI * 1.6); ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1.5; ctx.stroke();
+            } else {
+              // hair: a cap over the top with bangs, then the style's extra
+              ctx.beginPath(); ctx.arc(0, 0, 11.5, Math.PI * 1.02, Math.PI * 1.98); ctx.lineTo(10, -2);
+              for (let k = 4; k >= -4; k--) ctx.lineTo(k * 2.4, (k & 1) ? -4.5 : -1.5);
+              ctx.lineTo(-10.5, -2); ctx.closePath(); ctx.fillStyle = hairC; ctx.fill(); ctx.stroke();
+              if (o.style === 2) { shape(() => ctx.roundRect(-12.5, -3, 5, 11, 2.5), hairC); shape(() => ctx.roundRect(7.5, -3, 5, 11, 2.5), hairC); }
+              if (o.style === 3) shape(() => ctx.ellipse(11, -4, 3.5, 6, 0.5, 0, Math.PI * 2), hairC);
+              if (o.style === 4) { ctx.beginPath(); ctx.moveTo(-1, -11); ctx.quadraticCurveTo(2, -18, 5, -14); ctx.strokeStyle = hairC; ctx.lineWidth = 2.2; ctx.stroke(); ctx.lineWidth = 1.4; ctx.strokeStyle = INK; }
+              ctx.beginPath(); ctx.arc(-4, -6, 3.5, Math.PI * 1.1, Math.PI * 1.6); ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = 1.4; ctx.stroke(); ctx.strokeStyle = INK;
+              // face
+              const lx = o.look * 2;
+              if (z) {
+                disc(-4 + lx, 2, 3.2, 'rgba(60,40,70,.35)'); disc(4 + lx, 2, 3.2, 'rgba(60,40,70,.35)');
+                disc(-4 + lx, 1.5, 2.6, '#F4F0E6'); disc(4 + lx, 1.5, 2.6, '#F4F0E6'); disc(-4 + lx, 1.8, 1.2, '#D9333F'); disc(4 + lx, 1.8, 1.2, '#D9333F');
+                ctx.beginPath(); ctx.ellipse(lx, 7, 2.6, 2, 0, 0, Math.PI * 2); ctx.fillStyle = '#4A1F2A'; ctx.fill();
+                fill(-8 + lx, -1, 4, 1, '#7A3A4A');
+              } else {
+                for (const ex of [-4, 4]) { ctx.beginPath(); ctx.ellipse(ex + lx, 2, 1.9, 2.8, 0, 0, Math.PI * 2); ctx.fillStyle = '#2B1E26'; ctx.fill(); disc(ex + lx + 0.7, 0.9, 0.8, '#ffffff'); }
+                disc(-7.2 + lx, 5.5, 2, 'rgba(245,130,150,.4)'); disc(7.2 + lx, 5.5, 2, 'rgba(245,130,150,.4)');
+                ctx.beginPath(); ctx.arc(lx, 5.8, 1.6, 0.2, Math.PI - 0.2); ctx.strokeStyle = '#8A4A3A'; ctx.lineWidth = 1.1; ctx.stroke(); ctx.strokeStyle = INK;
+                if (o.boss) { ctx.lineWidth = 1.1; ctx.strokeRect(-7.5 + lx, -0.5, 6, 4.5); ctx.strokeRect(1.5 + lx, -0.5, 6, 4.5); }
+              }
+            }
+            ctx.restore(); ctx.lineWidth = 1.4;
+          };
+          const look = e => ({ hair: HAIR[e.hair], style: e.hair, skirt: e.hair % 2 === 1, club: CLUB[e.cls] || '#ffffff' });
+          const person = e => {
+            const sx = e.x * T - camX, sy = e.y * T - camY, shakeX = e.turning > 0 ? (Math.random() - 0.5) * 3 : 0;
+            const z = !!(e.zombie || (e.turning > 0 && Math.floor(game.phaseT * 12) % 2)), x = sx + shakeX, y = sy + 4;
+            const back = Math.sin(e.face) < -0.55 && !e.lost, scale = e.boss ? 1.3 : 0.92;
+            ctx.fillStyle = 'rgba(10,8,20,.32)'; ctx.beginPath(); ctx.ellipse(x, y, 11 * scale, 4 * scale, 0, 0, Math.PI * 2); ctx.fill();
+            if (e.imm > 0 && !e.ally && !e.lost) { ctx.beginPath(); ctx.arc(x, y - 22, 24, 0, Math.PI * 2); ctx.fillStyle = 'rgba(139,227,245,.18)'; ctx.fill(); ctx.strokeStyle = 'rgba(139,227,245,.8)'; ctx.lineWidth = 1.5; ctx.stroke(); }
+            if (e.host) { const gl = ctx.createRadialGradient(x, y - 20, 4, x, y - 20, 30 * scale); gl.addColorStop(0, 'rgba(229,72,77,.35)'); gl.addColorStop(1, 'rgba(229,72,77,0)'); ctx.fillStyle = gl; ctx.fillRect(x - 40, y - 60, 80, 80); }
+            ctx.save(); ctx.translate(x, y - Math.abs(Math.sin(e.walk * 4.5)) * 1.5); ctx.scale(Math.cos(e.face) < -0.2 ? -scale : scale, scale);
+            chibi({ ...look(e), zombie: z, back, walk: e.walk, look: Math.abs(Math.cos(e.face)) > 0.3 ? 1 : 0, boss: e.boss, dir: Math.cos(e.face) < -0.2 ? Math.PI - e.face : e.face });
+            ctx.restore();
+            const hy = y - 30 * scale;
+            if (e.stun > 0) for (let k = 0; k < 3; k++) { const a = game.phaseT * 6 + k * 2.1; label('✦', x + Math.cos(a) * 12, hy - 14 + Math.sin(a) * 3, 10, '#FFE27A'); }
+            if (e.fast > 0) { ctx.strokeStyle = 'rgba(255,255,255,.65)'; ctx.lineWidth = 1.6; for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(x - Math.cos(e.face) * 13, y - 26 + k * 7); ctx.lineTo(x - Math.cos(e.face) * 25, y - 26 + k * 7); ctx.stroke(); } }
+            // The name tag: gold for the player, red for the hosts, green for zombies.
             const tag = e === game.player ? '나' : e.boss ? '교감 선생님' : e.ally || e.lost || game.story ? e.name : 'Lv.' + e.lv + ' ' + e.name;
-            ctx.font = font(10); const tw = ctx.measureText(tag).width + 10;
-            ctx.beginPath(); ctx.roundRect(x - tw / 2, hy - 24, tw, 13, 6); ctx.fillStyle = 'rgba(10,12,28,.62)'; ctx.fill();
-            label(tag, x, hy - 17.5, 10, e === game.player ? '#FFD447' : e.host ? '#FF8A8E' : e.zombie ? '#B6E39A' : '#ffffff');
-            if (e.boss) ctx.restore();
-            if (e.lost) { const a = Math.abs(Math.sin(game.phaseT * 4)) * 3; pill(x - 22, hy - 44 - a, 44, 16, 'rgba(255,255,255,.92)'); label('살려줘!', x, hy - 36 - a, 10, '#E5484D'); }
-            if (e === game.player && !game.ended) { const a = 2 + Math.sin(game.phaseT * 5) * 2; ctx.beginPath(); ctx.moveTo(x - 5, hy - 32 - a); ctx.lineTo(x + 5, hy - 32 - a); ctx.lineTo(x, hy - 26 - a); ctx.closePath(); ctx.fillStyle = '#FFD447'; ctx.fill(); }
+            ctx.font = font(10); const tw = ctx.measureText(tag).width + 12, ty = hy - 30;
+            ctx.beginPath(); ctx.roundRect(x - tw / 2, ty, tw, 14, 7); ctx.fillStyle = e === game.player ? 'rgba(240,118,58,.92)' : e.host ? 'rgba(150,30,40,.85)' : e.zombie ? 'rgba(40,70,40,.8)' : 'rgba(18,20,42,.72)'; ctx.fill();
+            ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.stroke();
+            label(tag, x, ty + 7.5, 10, e === game.player ? '#ffffff' : e.host ? '#FFD0D2' : e.zombie ? '#C9F0B0' : '#ffffff');
+            if (e.lost) { const a = Math.abs(Math.sin(game.phaseT * 4)) * 3; pill(x - 22, ty - 20 - a, 44, 16, 'rgba(255,255,255,.95)'); label('살려줘!', x, ty - 12 - a, 10, '#E5484D'); }
+            if (e === game.player && !game.ended) { const a = 2 + Math.sin(game.phaseT * 5) * 2; ctx.beginPath(); ctx.moveTo(x - 5, ty - 8 - a); ctx.lineTo(x + 5, ty - 8 - a); ctx.lineTo(x, ty - 2 - a); ctx.closePath(); ctx.fillStyle = '#FFD447'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.stroke(); }
           };
           const outlined = (text, x, y, size, color, w = 0.22) => { ctx.font = font(size); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2.5, size * w); ctx.strokeStyle = '#0B0D1C'; ctx.strokeText(text, x, y); ctx.fillStyle = color; ctx.fillText(text, x, y); };
           const pill = (x, y, w, h, color = 'rgba(10,12,28,.7)') => { ctx.beginPath(); ctx.roundRect(x, y, w, h, h / 2); ctx.fillStyle = color; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.stroke(); };
@@ -5966,16 +6152,18 @@
             camX = camX ? camX + (tx - camX) * 0.18 : tx; camY = camY ? camY + (ty - camY) * 0.18 : ty;
             fill(0, 0, W, H, '#0B0D1C');
             const x0 = Math.max(0, Math.floor(camX / T)), x1 = Math.min(game.COLS - 1, Math.ceil((camX + W) / T)), y0 = Math.max(0, Math.floor(camY / T)), y1 = Math.min(game.ROWS - 1, Math.ceil((camY + H) / T) + 1);
-            for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (game.at(x, y) !== game.WALL) floorTile(x, y, x * T - camX, y * T - camY);
-            // Room names on the floor.
-            ctx.globalAlpha = 0.35; for (const r of game.ROOMS) label(r.name, (r.x0 + 1) * T - camX, (r.top ? r.y0 + 0.6 : r.y1 + 0.4) * T - camY, 15, '#2A1E14', 'left'); ctx.globalAlpha = 1;
+            floorPic ||= paintFloor(); ctx.drawImage(floorPic, Math.round(-camX), Math.round(-camY));
+            // The rooftop stairs: steps going up, glowing green once the door is open.
+            for (const sy0 of [11, 12]) { const sx = 42 * T - camX, sy = sy0 * T - camY; for (let k = 0; k < 5; k++) { fill(sx + k * 6, sy, 6, T, k % 2 ? '#9C978C' : '#B5B0A4'); fill(sx + k * 6, sy, 1, T, '#6E6A60'); } if (game.open) { fill(sx, sy, T, T, 'rgba(139,227,107,' + (0.35 + Math.sin(game.phaseT * 5) * 0.15) + ')'); } }
+            if (game.open) { const ex = 42.5 * T - camX, ey = 10.4 * T - camY; pill(ex - 22, ey - 14, 44, 16, 'rgba(40,140,70,.95)'); label('EXIT ▶', ex, ey - 6, 10, '#ffffff'); }
+            lights();
             for (const it of game.items) { const sx = it.x * T - camX, sy = it.y * T - camY + Math.sin(game.phaseT * 4 + it.x) * 2; disc(sx, sy, it.story ? 16 + Math.sin(game.phaseT * 6) * 3 : 12, it.story ? 'rgba(255,212,71,.45)' : 'rgba(255,240,170,.35)'); label(game.ITEMS[it.kind][0], sx, sy, 17, '#fff'); }
             if (game.speaker) { const sx = game.speaker.x * T - camX, sy = game.speaker.y * T - camY; for (let k = 0; k < 3; k++) { const ph = (game.phaseT * 1.5 + k / 3) % 1; ctx.beginPath(); ctx.arc(sx, sy, 10 + ph * 60, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(178,139,240,' + (1 - ph) * 0.7 + ')'; ctx.lineWidth = 2; ctx.stroke(); } label('📢', sx, sy, 20, '#fff'); }
             // Rows back to front: furniture, walls and people standing in that row.
             const people = game.ents.filter(e => !e.gone).sort((a, b) => a.y - b.y);
             let pi = 0;
             for (let y = y0; y <= y1; y++) {
-              for (let x = x0; x <= x1; x++) { const sx = x * T - camX, sy = y * T - camY; if (game.at(x, y) === game.WALL) wall(x, y, sx, sy); else furniture(x, y, sx, sy); }
+              for (let x = x0; x <= x1; x++) { const sx = x * T - camX, sy = y * T - camY; const v = game.at(x, y); if (v === game.WALL) wall(x, y, sx, sy); else if (v === game.DOOR) doorFrame(x, y, sx, sy); else furniture(x, y, sx, sy); }
               for (const b of game.bars) if (b.y === y) { const sx = b.x * T - camX, sy = b.y * T - camY; fill(sx + 2, sy + 2, T - 4, T - 6, '#9A6A3A'); ctx.strokeStyle = '#5B3A1C'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(sx + 4, sy + 4); ctx.lineTo(sx + T - 4, sy + T - 8); ctx.moveTo(sx + T - 4, sy + 4); ctx.lineTo(sx + 4, sy + T - 8); ctx.stroke(); fill(sx + 2, sy + T - 8, (T - 4) * Math.min(1, b.t / 9), 3, '#FFD447'); }
               while (pi < people.length && people[pi].y < y + 1) person(people[pi++]);
             }
@@ -5987,7 +6175,7 @@
             // The flashlight: dark round the edges, a flicker now and then.
             const px = p.x * T - camX, py = p.y * T - camY - 12, flick = Math.random() < 0.012 ? 0.15 : 0;
             const gr = ctx.createRadialGradient(px, py, 70, px, py, p.zombie ? 300 : 230);
-            gr.addColorStop(0, 'rgba(6,7,20,0)'); gr.addColorStop(1, 'rgba(6,7,20,' + (0.66 + flick) + ')');
+            gr.addColorStop(0, 'rgba(6,7,20,0)'); gr.addColorStop(1, 'rgba(6,7,20,' + (0.56 + flick) + ')');
             ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
           };
           const hud = () => {
@@ -6031,38 +6219,77 @@
             label(p.item ? game.ITEMS[p.item][0] : '🎒', ITM.x, ITM.y + 1, p.item ? 20 : 15, p.item ? '#fff' : 'rgba(255,255,255,.45)');
             if (banner) { const k = banner.t / banner.max, a = Math.min(1, banner.t * 2, (1 - k) * 8); ctx.globalAlpha = a; fill(0, H / 2 - 52, W, 74, 'rgba(6,7,20,.55)'); outlined(banner.text, W / 2, H / 2 - 24, 30, banner.color); if (banner.sub) label(banner.sub, W / 2, H / 2 + 8, 14, '#E8E9F5'); ctx.globalAlpha = 1; }
           };
+          // The lobby: a classroom at night (board, windows with the moon, desks in perspective), the waiting list with
+          // avatars, the club cards with each club's student drawn in its colour, and the buttons.
+          const glass = (x, y, w, h, r = 14) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fillStyle = 'rgba(14,16,40,.78)'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.stroke(); };
+          const avatar = (x, y, e) => {
+            ctx.save(); ctx.translate(x, y + 12); ctx.scale(0.42, 0.42);
+            ctx.beginPath(); ctx.rect(-30, -60, 60, 34); ctx.clip();
+            chibi({ ...look(e), zombie: false, back: false, walk: 0, look: 0, dir: 0 }); ctx.restore();
+          };
+          const room = () => {
+            const bg = ctx.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#30366A'); bg.addColorStop(0.62, '#1E2246'); bg.addColorStop(0.62, '#6E4E33'); bg.addColorStop(1, '#4A321F');
+            ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+            for (let k = 0; k < 9; k++) { const yy = 224 + k * k * 2.2; fill(0, yy, W, 1, 'rgba(0,0,0,.18)'); }
+            for (let k = -6; k <= 6; k++) { ctx.beginPath(); ctx.moveTo(420 + k * 30, 224); ctx.lineTo(420 + k * 120, H); ctx.strokeStyle = 'rgba(0,0,0,.12)'; ctx.lineWidth = 1; ctx.stroke(); }
+            // windows on the right wall edge with the moon
+            const sky = ctx.createLinearGradient(0, 60, 0, 200); sky.addColorStop(0, '#0E1636'); sky.addColorStop(1, '#2A3A78');
+            ctx.fillStyle = sky; ctx.fillRect(560, 60, 76, 150); disc(604, 96, 13, '#FFF1B8'); disc(598, 92, 13, '#0E1636');
+            for (const [sx2, sy2] of [[575, 130], [620, 150], [590, 175], [625, 75]]) disc(sx2, sy2, 1.2, '#ffffff');
+            ctx.strokeStyle = '#C9C4D8'; ctx.lineWidth = 3; ctx.strokeRect(560, 60, 76, 150); fill(597, 60, 2, 150, '#C9C4D8'); fill(560, 134, 76, 2, '#C9C4D8');
+            // the board
+            fill(226, 6, 392, 46, '#7A5530'); fill(230, 10, 384, 38, '#2C5A45'); fill(230, 44, 384, 4, '#5E3F22'); fill(300, 45, 22, 3, '#F4F0E6'); fill(330, 45, 10, 3, '#FFD447');
+            label('🏫 야자 탈출', 330, 29, 18, '#F4F0E6'); label('— 동아리를 고르세요 —', 500, 30, 12, 'rgba(244,240,230,.75)');
+          };
           const lobby = () => {
-            // A classroom at night: the board, a window with the moon, rows of desks.
-            fill(0, 0, W, H, '#2A2F55'); fill(0, 250, W, H - 250, '#7A5A3E'); for (let k = 0; k < 12; k++) fill(0, 252 + k * 9, W, 1, 'rgba(0,0,0,.12)');
-            fill(232, 8, 380, 40, '#24463A'); ctx.strokeStyle = '#8A6A44'; ctx.lineWidth = 4; ctx.strokeRect(232, 8, 380, 40);
-            label('🏫 야자 탈출 · 동아리를 고르세요', 422, 28, 16, 'rgba(255,255,255,.9)');
-            fill(12, 12, 190, 336, 'rgba(8,10,26,.72)'); label('대기실 · 학생 ' + game.ents.length + '명', 107, 30, 14, '#FFD447');
+            room();
+            glass(10, 10, 196, 340);
+            label('🪑 대기실', 24, 28, 14, '#FFD447', 'left'); label('학생 ' + game.ents.length + '명', 194, 28, 11, 'rgba(232,233,245,.7)', 'right');
+            const step = Math.min(22, 300 / game.ents.length);
             game.ents.forEach((e, i) => {
-              const y = 52 + i * Math.min(21, 290 / game.ents.length), me = e === game.player;
-              if (me) fill(18, y - 9, 178, 18, 'rgba(255,212,71,.18)');
-              label(game.CLASSES[e.cls][0], 30, y, 13, '#fff'); label('Lv.' + e.lv, 46, y, 11, me ? '#FFD447' : '#9FB4FF', 'left'); label(me ? '나 (' + game.CLASSES[e.cls][1] + ')' : e.name, 86, y, 12, me ? '#FFD447' : '#E8E9F5', 'left');
+              const y = 50 + i * step, me = e === game.player;
+              if (me) { ctx.beginPath(); ctx.roundRect(16, y - 10, 184, 20, 8); ctx.fillStyle = 'rgba(255,212,71,.2)'; ctx.fill(); }
+              avatar(30, y, e);
+              ctx.beginPath(); ctx.roundRect(42, y - 7, 36, 14, 7); ctx.fillStyle = me ? '#F0763A' : 'rgba(90,107,216,.85)'; ctx.fill();
+              label('Lv.' + e.lv, 60, y + 0.5, 9, '#ffffff');
+              label(me ? '나' : e.name, 84, y + 0.5, 12, me ? '#FFD447' : '#E8E9F5', 'left');
+              label(game.CLASSES[e.cls][0] + ' ' + game.CLASSES[e.cls][1], 196, y + 0.5, 9, 'rgba(232,233,245,.65)', 'right');
             });
             CLS.forEach((id, i) => {
-              const r = CARD(i), c = game.CLASSES[id], on = i === pick;
-              ctx.beginPath(); ctx.roundRect(r.x, r.y + 3, r.w, r.h, 12); ctx.fillStyle = '#0B0D1C'; ctx.fill();
-              ctx.beginPath(); ctx.roundRect(r.x, r.y + (on ? 2 : 0), r.w, r.h, 12); ctx.fillStyle = on ? '#FFE9A8' : '#F4F1EA'; ctx.fill(); ctx.lineWidth = on ? 4 : 2; ctx.strokeStyle = on ? '#F0763A' : '#3A3F66'; ctx.stroke();
-              label(c[0], r.x + 30, r.y + 36, 30, '#000'); label(c[1], r.x + 56, r.y + 26, 15, '#2A2F55', 'left'); label(c[2], r.x + 56, r.y + 46, 12, '#F0763A', 'left');
-              label('쿨타임 ' + c[4] + '초', r.x + r.w / 2, r.y + 72, 10, 'rgba(42,47,85,.7)');
+              const r = CARD(i), c = game.CLASSES[id], on = i === pick, col = CLUB[id];
+              ctx.save();
+              if (on) { ctx.shadowColor = 'rgba(255,212,71,.8)'; ctx.shadowBlur = 14; }
+              ctx.beginPath(); ctx.roundRect(r.x, r.y + 4, r.w, r.h, 14); ctx.fillStyle = '#0B0D1C'; ctx.fill();
+              const cg = ctx.createLinearGradient(0, r.y, 0, r.y + r.h); cg.addColorStop(0, on ? '#FFF4CC' : '#FBF8F1'); cg.addColorStop(1, on ? '#FFE08A' : '#E9E4DA');
+              ctx.beginPath(); ctx.roundRect(r.x, r.y + (on ? 1 : 0), r.w, r.h, 14); ctx.fillStyle = cg; ctx.fill(); ctx.restore();
+              ctx.beginPath(); ctx.roundRect(r.x, r.y + (on ? 1 : 0), r.w, r.h, 14); ctx.lineWidth = on ? 3.5 : 2; ctx.strokeStyle = on ? '#F0763A' : '#3A3F66'; ctx.stroke();
+              ctx.save(); ctx.beginPath(); ctx.roundRect(r.x + 4, r.y + 4, 46, r.h - 8, 10); ctx.fillStyle = col; ctx.globalAlpha = 0.35; ctx.fill(); ctx.restore();
+              ctx.save(); ctx.translate(r.x + 27, r.y + r.h - 8 + (on ? Math.sin(performance.now() / 200) * 1.5 : 0)); ctx.scale(1.25, 1.25);
+              chibi({ hair: HAIR[i % 5], style: i % 5, skirt: i % 2 === 1, club: col, zombie: false, back: false, walk: on ? performance.now() / 300 : 0, look: 0, dir: 0 }); ctx.restore();
+              label(c[0], r.x + 46, r.y + 16, 15, '#000');
+              label(c[1], r.x + 58, r.y + 34, 15, '#2A2F55', 'left');
+              ctx.beginPath(); ctx.roundRect(r.x + 56, r.y + 47, 68, 18, 9); ctx.fillStyle = on ? '#F0763A' : '#3A3F66'; ctx.fill(); label(c[2], r.x + 90, r.y + 56.5, 11, '#ffffff');
+              label('⏱ ' + c[4] + '초', r.x + 90, r.y + 76, 10, 'rgba(42,47,85,.65)');
             });
             const c = game.CLASSES[CLS[pick]];
-            ctx.beginPath(); ctx.roundRect(214, 256, 410, 38, 10); ctx.fillStyle = 'rgba(8,10,26,.72)'; ctx.fill();
-            label(c[0] + ' ' + c[2] + ' — ' + c[3], 419, 275, 12, '#ffffff');
+            ctx.beginPath(); ctx.roundRect(214, 256, 410, 38, 12); ctx.fillStyle = 'rgba(255,253,245,.94)'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = CLUB[CLS[pick]]; ctx.stroke();
+            fill(214, 262, 5, 26, CLUB[CLS[pick]]);
+            label(c[0] + ' ' + c[2], 228, 275, 13, '#F0763A', 'left'); label(c[3], 314, 275, 11, '#2A2F55', 'left');
             const need = yajaNeed(prof.lv);
-            label('Lv.' + prof.lv + ' · EXP ' + prof.xp + '/' + need, 216, 312, 11, '#E8E9F5', 'left');
-            fill(216, 322, 108, 6, 'rgba(255,255,255,.18)'); fill(216, 322, 108 * Math.min(1, prof.xp / need), 6, '#FFD447');
-            label('난이도 ' + (g.levels.find(l => l[0] === st.level) || [0, ''])[1], 216, 340, 10, 'rgba(232,233,245,.7)', 'left');
+            glass(212, 300, 116, 50, 10);
+            label('Lv.' + prof.lv, 222, 314, 13, '#FFD447', 'left'); label(prof.xp + '/' + need, 318, 314, 9, 'rgba(232,233,245,.7)', 'right');
+            ctx.beginPath(); ctx.roundRect(222, 324, 96, 7, 3.5); ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fill();
+            ctx.beginPath(); ctx.roundRect(222, 324, Math.max(7, 96 * Math.min(1, prof.xp / need)), 7, 3.5); ctx.fillStyle = '#FFD447'; ctx.fill();
+            label('난이도 ' + (g.levels.find(l => l[0] === st.level) || [0, ''])[1], 222, 341, 10, 'rgba(232,233,245,.75)', 'left');
             bigButton(STORYB, '📖 스토리', '#5A6BD8', '#26306E');
             if (view === 'eps') {
-              fill(206, 52, 428, 244, 'rgba(8,10,26,.92)'); label('📖 스토리 1부 · 야자 시간의 비밀', 420, 72, 15, '#FFD447');
+              glass(206, 54, 428, 242, 16); label('📖 스토리 1부 · 야자 시간의 비밀', 420, 74, 15, '#FFD447');
               game.STORY.forEach((ep, i) => {
                 const r = EP(i), open = i <= prof.story, done = i < prof.story;
-                ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 12); ctx.fillStyle = open ? '#F4F1EA' : '#4A4E70'; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = open ? '#F0763A' : '#2A2F55'; ctx.stroke();
-                label('EP.' + (i + 1), r.x + r.w / 2, r.y + 22, 13, open ? '#F0763A' : '#9AA0C8');
+                ctx.beginPath(); ctx.roundRect(r.x, r.y + 4, r.w, r.h, 14); ctx.fillStyle = '#0B0D1C'; ctx.fill();
+                const eg = ctx.createLinearGradient(0, r.y, 0, r.y + r.h); eg.addColorStop(0, open ? ['#FFE9C2', '#E2E6FF', '#D9F5E4'][i] : '#4A4E70'); eg.addColorStop(1, open ? '#F4F1EA' : '#363A5A');
+                ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 14); ctx.fillStyle = eg; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = open ? '#F0763A' : '#2A2F55'; ctx.stroke();
+                ctx.beginPath(); ctx.roundRect(r.x + r.w / 2 - 26, r.y + 10, 52, 20, 10); ctx.fillStyle = open ? '#F0763A' : '#2A2F55'; ctx.fill(); label('EP.' + (i + 1), r.x + r.w / 2, r.y + 20.5, 12, '#ffffff');
                 label(open ? ['🏫', '🗝️', '🚁'][i] : '🔒', r.x + r.w / 2, r.y + 70, 40, '#000');
                 label(ep.title, r.x + r.w / 2, r.y + 118, 14, open ? '#2A2F55' : '#C2C6E4'); label(ep.sub, r.x + r.w / 2, r.y + 140, 10, open ? 'rgba(42,47,85,.7)' : '#9AA0C8');
                 label(done ? '✔ 클리어' : open ? '▶ 시작' : '이전 화를 깨면 열려요', r.x + r.w / 2, r.y + 174, done || open ? 13 : 9, done ? '#3FA57A' : open ? '#F0763A' : '#9AA0C8');
@@ -6079,17 +6306,12 @@
             ctx.beginPath(); ctx.roundRect(-B.w / 2, -B.h / 2, B.w, B.h, 14); ctx.fillStyle = color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.stroke();
             label(text, 0, 1, B.w < 130 ? 15 : 17, '#ffffff'); ctx.restore();
           };
-          const FACE = { '나': [0, '#FFD447'], '하린': [1, '#F58CC0'], '도윤': [0, '#F2F2F2'], '서진': [3, '#A47CF0'], '지우': [4, '#FFD447'], '유나': [2, '#FF9A3D'] };
+          const FACE = { '나': [0, '#FF9A3D', 0, false], '하린': [1, '#F58CC0', 1, true], '도윤': [2, '#F2F2F2', 4, false], '서진': [3, '#A47CF0', 2, true], '지우': [4, '#FFD447', 3, true], '유나': [3, '#FF9A3D', 1, true] };
           const portrait = (who, cx, cy, size) => {
-            const zombieFace = who === '???';
-            ctx.save(); ctx.translate(cx, cy); ctx.scale(size, size);
-            ctx.beginPath(); ctx.roundRect(-16, 6, 32, 24, 8); ctx.fillStyle = zombieFace ? '#5E6B4E' : '#2E3A6B'; ctx.fill();
-            const f = FACE[who] || [0, '#ffffff']; if (!zombieFace) fill(-2, 7, 4, 14, f[1]);
-            disc(0, -8, 17, zombieFace ? '#9CCB78' : '#F6D7B8');
-            ctx.beginPath(); ctx.arc(0, -10, 18, Math.PI * 1.02, Math.PI * 1.98); ctx.lineWidth = 9; ctx.strokeStyle = zombieFace ? '#9A9A9A' : HAIR[f[0]]; ctx.stroke();
-            disc(-6, -6, 2.6, zombieFace ? '#E5484D' : '#2B1E16'); disc(6, -6, 2.6, zombieFace ? '#E5484D' : '#2B1E16');
-            if (zombieFace) { ctx.strokeStyle = '#2B1E16'; ctx.lineWidth = 1.5; ctx.strokeRect(-11, -9, 9, 7); ctx.strokeRect(2, -9, 9, 7); fill(-5, 2, 10, 2, '#4A2020'); }
-            else { ctx.beginPath(); ctx.arc(0, 0, 4, 0.2, Math.PI - 0.2); ctx.lineWidth = 1.5; ctx.strokeStyle = '#8A4A3A'; ctx.stroke(); disc(-10, 0, 2.5, 'rgba(245,140,160,.45)'); disc(10, 0, 2.5, 'rgba(245,140,160,.45)'); }
+            const zombieFace = who === '???', f = FACE[who] || [0, '#ffffff'];
+            ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, 34 * size / 1.25, 0, Math.PI * 2); ctx.fillStyle = zombieFace ? '#3A2030' : '#2A3160'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = zombieFace ? '#E5484D' : f[1]; ctx.stroke(); ctx.clip();
+            ctx.translate(cx, cy + 68 * size / 1.25); ctx.scale(2.3 * size / 1.25, 2.3 * size / 1.25);
+            chibi({ hair: HAIR[f[0]], style: f[2] ?? f[0], skirt: !!f[3], club: f[1], zombie: zombieFace, boss: zombieFace, back: false, walk: 0, look: 0, dir: 0 });
             ctx.restore();
           };
           const scene = () => {
@@ -6098,7 +6320,7 @@
             fill(0, 0, W, H, 'rgba(6,7,20,.55)');
             if (game.si === 0 && game.li === 0) { fill(0, 70, W, 56, 'rgba(6,7,20,.7)'); outlined('EP.' + (game.ep + 1) + ' ' + game.story.title, W / 2, 98, 28, '#FFD447'); }
             const n = Math.min(text.length, Math.floor((performance.now() - typedAt) / 1000 * LINE_CPS));
-            ctx.beginPath(); ctx.roundRect(16, H - 112, W - 32, 98, 14); ctx.fillStyle = 'rgba(12,14,32,.92)'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = narr ? '#FFD447' : '#F0763A'; ctx.stroke();
+            { const dg = ctx.createLinearGradient(0, H - 112, 0, H - 14); dg.addColorStop(0, 'rgba(30,34,72,.96)'); dg.addColorStop(1, 'rgba(12,14,32,.96)'); ctx.beginPath(); ctx.roundRect(16, H - 112, W - 32, 98, 16); ctx.fillStyle = dg; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = narr ? '#FFD447' : '#F0763A'; ctx.stroke(); ctx.beginPath(); ctx.roundRect(22, H - 106, W - 44, 86, 12); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.stroke(); }
             if (narr) label(text.slice(0, n), W / 2, H - 63, 16, '#FFD447');
             else {
               if (radio) label('📢', 66, H - 63, 40, '#fff'); else portrait(who, 66, H - 66, 1.25);
@@ -6690,7 +6912,7 @@
               const y = st.yaja || { xp: game.xp, ups: 0, lv: 1 }, p = game.player;
               if (game.story) {
                 if (game.won) showResult('EP.' + (game.ep + 1) + ' ' + game.story.title + ' 클리어!', 'EXP +' + y.xp + (y.ups ? ' · 레벨 업! Lv.' + y.lv : '') + (game.ep < game.STORY.length - 1 ? ' · 다음 화가 열렸어요' : ' · 1부 완결!'), null, '대기실로');
-                else showResult('잡혔다…', '좀비에게 붙잡혔어요. 같은 자리에서 다시 할 수 있어요', card => card.append(button('↻ 여기서 다시', () => { if (game.retry()) { endSeen = false; awarded = null; st.stopped = 0; result.hidden = true; delete result.dataset.headline; focus(); } }, 'gfx-game-again')), '대기실로');
+                else showResult('잡혔다…', '좀비에게 붙잡혔어요. 같은 자리에서 다시 할 수 있어요', card => card.append(button('↻ 여기서 다시', () => { if (st.yajaRetry?.()) { st.hideResult = false; result.hidden = true; delete result.dataset.headline; focus(); } }, 'gfx-game-again')), '대기실로');
                 return;
               }
               const head = game.won ? (p.zombie ? '좀비 승리!' : game.why === 'escape' ? '옥상 탈출 성공!' : '살아남았다!') : (p.zombie ? '학생들이 버텼다…' : '전원 감염…');

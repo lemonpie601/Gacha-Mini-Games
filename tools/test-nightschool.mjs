@@ -13,7 +13,7 @@ const run = (g, s) => { for (let i = 0; i < s * 4 && !g.ended; i++) g.step(250);
 // Straight to play: the intro skipped and the scatter run out.
 const playing = (seed = 3, lv = 'normal', cls = 'runner') => { const g = newNightSchoolGame(rng(seed), lv, cls); g.begin(); g.skip(); run(g, 8.1); return g; };
 // A quiet stage: only the player and the entities a test adds.
-const solo = (seed = 3, cls = 'runner') => { const g = playing(seed, 'normal', cls); for (const e of g.ents) if (e !== g.player) e.gone = true; g.items.length = 0; g.nextItem = 1e9; return g; };
+const solo = (seed = 3, cls = 'runner') => { const g = playing(seed, 'normal', cls); for (const e of g.ents) if (e !== g.player) e.gone = true; g.items.length = 0; g.nextItem = 1e9; g.player.x = 6.5; g.player.y = 12.5; return g; };
 const put = (g, e, x, y) => { e.gone = false; e.x = x; e.y = y; return e; };
 const zombieAt = (g, x, y) => { const z = g.ents.find(e => e !== g.player && e.gone); put(g, z, x, y); z.zombie = true; z.turning = 0; z.stun = 0; z.bot = false; return z; };
 const kidAt = (g, x, y) => { const k = g.ents.filter(e => e !== g.player && e.gone).pop(); put(g, k, x, y); k.zombie = false; k.bot = false; return k; };
@@ -45,7 +45,7 @@ test('a zombie touching a student turns them after a moment; the player plays on
   assert.ok(g.ended && g.won && g.why === 'all', 'no students left: the zombies win');
 });
 test('skills: dash, kick, flash, vaccine, barricade, speaker; each with its cooldown', () => {
-  const r = solo(3, 'runner'); const s0 = r.player.x; r.aim(1, 0); r.step(250); const plain = r.player.x - s0;
+  const r = solo(3, 'runner'); put(r, r.player, 6.5, 12.5); const s0 = r.player.x; r.aim(1, 0); r.step(250); const plain = r.player.x - s0;
   assert.ok(r.skill() && r.player.cd > 0 && !r.skill(), 'cooldown'); const s1 = r.player.x; r.step(250); assert.ok(r.player.x - s1 > plain * 1.5, 'dash is faster');
   const t = solo(3, 'taekwon'); const z = zombieAt(t, t.player.x + 1, t.player.y); const d0 = Math.hypot(z.x - t.player.x, z.y - t.player.y);
   assert.ok(t.skill()); assert.ok(z.stun > 1.5 && Math.hypot(z.x - t.player.x, z.y - t.player.y) > d0 + 0.5, 'kicked away and stunned');
