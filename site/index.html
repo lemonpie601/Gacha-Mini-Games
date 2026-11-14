@@ -46,7 +46,7 @@
     label .tag { display:none; }
     select { max-width:9em; padding:.1em .6em; }
     header { display:none; }
-    #games { min-height:0; padding:6px max(6px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)); }
+    #games { min-height:0; padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
   }
   /* Phones on their side: no title row, the games get the whole height. The picker sits at the top of the game
      list on the right, which leaves it 46px. */
@@ -58,13 +58,13 @@
     label { flex:1; min-width:0; } select { width:100%; }
     header { display:none !important; }
     select { padding:.15em .6em; }
-    #games { min-height:0; padding:6px max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
+    #games { min-height:0; padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
   }
 </style>
 </head>
 <body>
 <header>
-  <h1>🎮 Gacha Mini Games<small>v1.19.0</small></h1>
+  <h1>🎮 Gacha Mini Games<small>v1.21.0</small></h1>
   <label><span class="tag">테마</span>
     <select id="preset" aria-label="테마">
       <option value="cream">크림 코코아</option>
@@ -85,7 +85,7 @@
 </header>
 <div id="games"></div>
 <script>
-/* Gacha Mini Games v1.19.0 — personal extension for Gacha Forge on Marinara Engine.
+/* Gacha Mini Games v1.21.0 — personal extension for Gacha Forge on Marinara Engine.
  * While a chapter or story is being generated, the generation screen gets a column of small games on its right:
  * 지뢰찾기, 사과 상자 (the fruit follows the 말랑 colour preset), 2048, 짝 맞추기, 쿠키 가게, 디저트 핀볼 and more. Closing the column or
  * finishing generation removes them; nothing here touches the run, rewards or the generation request.
@@ -1354,7 +1354,8 @@
     // Start HP, seconds per regen HP, toughness gained per minute, spawns per second, blob speed (start, cap), big blob contact damage,
     // seconds until the first surrounding ring, and toughness growth per minute after cfg[9] seconds, then when bumps start to hurt more and how many seconds each extra point takes.
     const cfg = ({ easiest: [10, 7, 1.2, 1.5, 32, 65, 1, 75, 1.6, 150, 200, 60], easy: [9, 9, 2, 2, 40, 80, 2, 55, 1.9, 90, 130, 50], normal: [8, 12, 3, 2.6, 50, 95, 2, 40, 2.1, 60, 80, 45], hard: [7, 16, 4.5, 3.2, 60, 110, 3, 30, 2.3, 35, 50, 35], expert: [6, 22, 6, 4, 70, 130, 3, 25, 2.6, 10, 20, 25] })[difficulty] || [8, 12, 3, 2.6, 50, 95, 2, 40, 2.1, 60, 80, 45];
-    const W = 360, H = 520, MAX = 150;
+    // The view is 360×520; the field around it is 1440×1440 and the camera follows the hero. Blobs come in at the view's edges.
+    const W = 360, H = 520, WW = 1440, WH = 1440, MAX = 150;
     // id: [icon, name, effect, apply, still offered?]
     const UPS = {
       // Damage never runs out, so a long run always has something to take; each stack adds a little less (never under 10%).
@@ -1381,7 +1382,7 @@
       meteor: ['☄️', '유성우', '몇 초마다 별똥별이 적 위로 떨어져요', g => { g.meteor++; g.meteorT = Math.min(g.meteorT, 1); }, g => g.meteor < 3],
       heal: ['🍯', '시럽 회복', 'HP 4 회복', g => { g.hp = Math.min(g.maxHp, g.hp + 4); }, g => g.hp < g.maxHp],
     };
-    const game = { w: W, h: H, hero: { x: W / 2, y: H / 2, r: 11 }, hp: cfg[0], maxHp: cfg[0], dmg: 1.4, cool: 0.45, shots: 1, orbit: 0, speed: 105, pickup: 70, pierce: 0, boom: 0, chain: 0, crit: 0.05, dmgN: 0, vac: 0, regenEvery: cfg[1],
+    const game = { w: WW, h: WH, vw: W, vh: H, hero: { x: WW / 2, y: WH / 2, r: 11 }, hp: cfg[0], maxHp: cfg[0], dmg: 1.4, cool: 0.45, shots: 1, orbit: 0, speed: 105, pickup: 70, pierce: 0, boom: 0, chain: 0, crit: 0.05, dmgN: 0, vac: 0, regenEvery: cfg[1],
       enemies: [], bullets: [], gems: [], honey: [], bolts: [], events: [], stacks: {}, time: 0, over: 0, kills: 0, score: 0, level: 1, xp: 0, need: 2, pending: 0, choices: null, started: false, ended: false,
       frost: 0, nova: 0, novaT: 0, thorn: 0, bees: 0, beeT: 0, size: 0, bubble: 0, shield: 0, shieldT: 0, greed: 0, xpMul: 1, meteor: 0, meteorT: 0, meteors: [], items: [], freeze: 0,
       revives: 0, free: 0, luck: 0, reborn: 0, choiceKind: 'level', invuln: 0, hurtAt: -9, killAt: -9, gemAt: -9, levelAt: -9, bigAt: -9, waveAt: -9, ringAt: -9, spin: 0, fire: 0, dx: 0, dy: 0, nextBig: 60, nextWave: 25, nextRing: cfg[7], spawnAcc: 3, regenT: 0, vacT: 0, vacOn: 0, combo: 0, comboAt: -9, comboMax: 0, ids: 0 };
@@ -1391,9 +1392,22 @@
     const P = k => Math.max(0, Math.floor(Number(perks[k]) || 0));
     game.dmg *= 1 + 0.08 * P('atk'); game.maxHp = game.hp = cfg[0] + P('hp'); game.speed *= 1 + 0.05 * P('spd'); game.xpMul = 1 + 0.1 * P('xp');
     game.cool *= Math.pow(0.95, P('cool')); game.pickup *= 1 + 0.12 * P('magnet'); game.revives = Math.min(2, P('revive')); game.free = Math.min(3, P('card'));
-    game.luck = P('luck'); game.crit += 0.02 * game.luck; game.reborn = P('reborn'); game.baseHp = game.maxHp;
+    game.luck = P('luck'); game.crit += 0.02 * game.luck + 0.03 * P('critP'); game.reborn = P('reborn'); game.baseHp = game.maxHp;
+    game.regenEvery *= Math.pow(0.9, P('regenP'));
+    if (P('boomStart')) { game.boom = 1; game.stacks.boom = 1; }
+    if (P('shieldStart')) { game.bubble = 1; game.shield = 1; game.stacks.bubble = 1; }
+    game.critMul = 2.5 + 0.2 * P('critDmg'); game.dodge = 0.05 * P('dodge'); game.honeyMul = 1 + 0.5 * P('honeyP');
+    for (const [k, f, n] of [['pierceStart', 'pierce', 1], ['orbitStart', 'orbit', 2], ['chainStart', 'chain', 1], ['beeStart', 'bees', 1], ['meteorStart', 'meteor', 1], ['frostStart', 'frost', 1]]) if (P(k)) { game[f] = n; game.stacks[{ pierce: 'pierce', orbit: 'orbit', chain: 'chain', bees: 'bee', meteor: 'meteor', frost: 'frost' }[f]] = 1; }
+    if (game.meteor) game.meteorT = 2;
     // Rebirth stars a run earns: time, kills and level, a little more for every rebirth so far.
-    game.stars = () => Math.floor((game.time / 6 + game.kills / 25 + game.level * 3) * (1 + 0.1 * game.reborn));
+    // Rebirth stars: a modest handful per run (time, kills, level), a little more for every rebirth and the 별 수집가 node.
+    game.stars = () => Math.floor((game.time / 30 + game.kills / 150 + game.level * 0.6) * (1 + 0.05 * game.reborn) * (1 + 0.1 * P('starP')));
+    // Rebirth is the player's call once the run has gone far enough (level 8): the run ends and pays its stars in full.
+    // A run that ends by melting pays only 40%.
+    game.REBIRTH_LV = 8 - Math.min(3, P('rebLv')); game.reborned = false;
+    game.canRebirth = () => game.started && !game.ended && game.level >= game.REBIRTH_LV;
+    game.rebirth = () => { if (!game.canRebirth()) return false; game.reborned = true; game.ended = true; game.choices = null; game.over = 0; emit('rebirth', game.hero.x, game.hero.y, 0); return true; };
+    game.points = () => Math.floor(game.stars() * (game.reborned ? 1 : 0.4));
     game.start = () => {
       if (game.ended) return;
       if (!game.started && game.free > 0) { game.pending = game.free - 1; offer('free'); }
@@ -1421,9 +1435,13 @@
       if (game.pending > 0) { game.pending--; offer(game.choiceKind); }
       return true;
     };
+    // A point just outside the view: side 0 top, 1 bottom, 2 left, 3 right; t along it; off beyond it.
+    const edge = (side, t, off = 8) => { const h = game.hero, vw = game.vw, vh = game.vh, x0 = h.x - vw / 2, y0 = h.y - vh / 2; return side === 0 ? [x0 + t * vw, y0 - off] : side === 1 ? [x0 + t * vw, y0 + vh + off] : side === 2 ? [x0 - off, y0 + t * vh] : [x0 + vw + off, y0 + t * vh]; };
+    // The screen may show more than 360×520 (a tall phone); the spawns follow it.
+    game.setView = (vw, vh) => { game.vw = Math.max(W, Math.min(900, vw)); game.vh = Math.max(H, Math.min(1200, vh)); };
     const spawn = (big, x, y, elite) => {
-      const side = Math.floor(random() * 4), t = random(), m = game.grow(), k = big ? Math.floor(game.time / 60) : 0;
-      const e = { x: x ?? (side < 2 ? t * W : side === 2 ? -8 : W + 8), y: y ?? (side === 0 ? -8 : side === 1 ? H + 8 : t * H), kind: Math.floor(random() * 4), hit: 0, big, push: 0, id: ++game.ids };
+      const side = Math.floor(random() * 4), t = random(), m = game.grow(), k = big ? Math.floor(game.time / 60) : 0, at = edge(side, t);
+      const e = { x: x ?? at[0], y: y ?? at[1], kind: Math.floor(random() * 4), hit: 0, big, push: 0, id: ++game.ids };
       e.hp = e.max = big ? 14 * m * (1 + 0.35 * (k - 1)) : (elite ? 4 : 1) * m;
       e.speed = clamp(cfg[4] * (1 + game.time / 150), 20, big ? 44 : cfg[5]) * (big ? 0.75 : 1) * (0.9 + random() * 0.2);
       e.r = big ? 21 : elite ? 13 : 10 + random() * 2; e.elite = !!elite; e.dmg = (big ? cfg[6] : 1) + game.touch() - 1;
@@ -1445,7 +1463,7 @@
       const n = e.big ? 6 : 1;
       for (let i = 0; i < n; i++) gem(e.x + (n > 1 ? (random() - 0.5) * 40 : 0), e.y + (n > 1 ? (random() - 0.5) * 40 : 0), e.big ? 3 : 1);
       // Honey: sometimes from a blob, always from a big one, and for every 25 kills in a row.
-      if ((e.big || random() < 0.025 || game.combo % 25 === 0) && game.honey.length < 4) game.honey.push({ x: e.x, y: e.y, sp: 0 });
+      if ((e.big || random() < 0.025 * game.honeyMul || game.combo % 25 === 0) && game.honey.length < 4) game.honey.push({ x: e.x, y: e.y, sp: 0 });
       if (e.big) game.items.push({ x: e.x, y: e.y, kind: 'chest', sp: 0 });
       else if (game.items.length < 5 && random() < 0.006 * (1 + 0.25 * game.luck)) game.items.push({ x: e.x, y: e.y, kind: ['bomb', 'magnet', 'freeze'][Math.floor(random() * 3)], sp: 0 });
       if (game.boom && depth < Math.min(2, game.boom)) blast(e.x, e.y, depth);
@@ -1462,7 +1480,7 @@
     // quiet: part of a blast, so no number for every blob in it.
     const hit = (e, dmg, depth = 0, quiet = false) => {
       if (e.dead) return;
-      const crit = !quiet && random() < game.crit; if (crit) dmg *= 2.5;
+      const crit = !quiet && random() < game.crit; if (crit) dmg *= game.critMul;
       e.hp -= dmg; e.hit = 0.1;
       if (!quiet || e.hp <= 0) emit('hit', e.x, e.y - e.r, dmg, { crit });
       if (e.hp <= 0) { e.dead = true; kill(e, depth); }
@@ -1480,33 +1498,36 @@
       const h = game.hero;
       game.time += dt; game.spin += dt * (3 + game.orbit * 0.25); game.invuln = Math.max(0, game.invuln - dt);
       if (game.combo && game.time - game.comboAt > 2.2) game.combo = 0;
-      h.x = clamp(h.x + game.dx * game.speed * dt, h.r, W - h.r); h.y = clamp(h.y + game.dy * game.speed * dt, h.r, H - h.r);
+      h.x = clamp(h.x + game.dx * game.speed * dt, h.r, WW - h.r); h.y = clamp(h.y + game.dy * game.speed * dt, h.r, WH - h.r);
       // Regen: a heart every so many seconds.
       if (game.hp < game.maxHp) { game.regenT += dt; if (game.regenT >= game.regenEvery) { game.regenT = 0; game.hp++; emit('heal', h.x, h.y, 1); } } else game.regenT = 0;
       // Spawns: a rate that climbs, a wave every 30 s, a big blob every minute.
       game.spawnAcc += game.rate() * dt;
-      while (game.spawnAcc >= 1) { game.spawnAcc--; if (game.enemies.length < MAX) { const g = Math.min(MAX - game.enemies.length, random() < 0.2 ? 3 : 1), side = Math.floor(random() * 4), t = random(); for (let i = 0; i < g; i++) spawn(false, side < 2 ? t * W + i * 14 : side === 2 ? -8 - i * 8 : W + 8 + i * 8, side === 0 ? -8 - i * 8 : side === 1 ? H + 8 + i * 8 : t * H + i * 14); } }
+      while (game.spawnAcc >= 1) { game.spawnAcc--; if (game.enemies.length < MAX) { const g = Math.min(MAX - game.enemies.length, random() < 0.2 ? 3 : 1), side = Math.floor(random() * 4), t = random(); for (let i = 0; i < g; i++) { const [ex, ey] = edge(side, t, 8 + i * 8); spawn(false, ex + (side < 2 ? i * 14 : 0), ey + (side >= 2 ? i * 14 : 0)); } } }
       if (game.time >= game.nextWave) {
         game.nextWave += 30; game.waveAt = game.time; emit('wave', 0, 0, 0);
         const side = Math.floor(random() * 4), n = Math.min(MAX - game.enemies.length, 12 + Math.floor(game.time / 8));
-        for (let i = 0; i < n; i++) { const t = (i + 0.5) / n; spawn(false, side < 2 ? t * W : side === 2 ? -10 - (i % 3) * 10 : W + 10 + (i % 3) * 10, side === 0 ? -10 - (i % 3) * 10 : side === 1 ? H + 10 + (i % 3) * 10 : t * H); }
+        for (let i = 0; i < n; i++) { const [ex, ey] = edge(side, (i + 0.5) / n, 10 + (i % 3) * 10); spawn(false, ex, ey); }
       }
       // A ring of tough blobs closes in round the hero every so often, more often later.
       if (game.time >= game.nextRing) {
         game.nextRing += Math.max(30, 55 - game.time / 12); game.ringAt = game.time; emit('ring', 0, 0, 0);
         const n = Math.min(MAX - game.enemies.length, 14 + Math.floor(game.time / 6));
-        for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2 + random() * 0.1; spawn(false, clamp(h.x + Math.cos(a) * 170, -14, W + 14), clamp(h.y + Math.sin(a) * 170, -14, H + 14), true); }
+        for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2 + random() * 0.1; spawn(false, clamp(h.x + Math.cos(a) * 170, -14, WW + 14), clamp(h.y + Math.sin(a) * 170, -14, WH + 14), true); }
       }
       if (game.time >= game.nextBig) { game.nextBig += 60; spawn(true); game.bigAt = game.time; emit('big', 0, 0, 0); }
       // Chase, push apart a little, touch.
       const list = game.enemies;
       for (const e of list) {
-        const d = Math.hypot(h.x - e.x, h.y - e.y) || 1;
+        let d = Math.hypot(h.x - e.x, h.y - e.y) || 1;
+        // A blob left far behind comes round again at the view's edge.
+        if (d > 760 && !e.big) { const [ex, ey] = edge(Math.floor(random() * 4), random(), 12); e.x = ex; e.y = ey; d = Math.hypot(h.x - e.x, h.y - e.y) || 1; }
         const sp = game.freeze > 0 ? 0 : e.slow > 0 ? 1 - 0.2 * game.frost : 1; e.slow = Math.max(0, (e.slow || 0) - dt);
         e.x += (h.x - e.x) / d * e.speed * sp * dt; e.y += (h.y - e.y) / d * e.speed * sp * dt; e.hit = Math.max(0, e.hit - dt); e.push = Math.max(0, e.push - dt);
         if (d < e.r + h.r * 0.8 && !game.invuln) {
           game.invuln = 1; game.hurtAt = game.time; game.regenT = 0;
           if (game.shield) { game.shield = 0; game.shieldT = 0; emit('block', h.x, h.y, 0); }
+          else if (game.dodge && random() < game.dodge) emit('block', h.x, h.y, 1);
           else { const dmg = Math.max(1, e.dmg - (game.thorn >= 2 ? 1 : 0)); game.hp -= dmg; emit('hurt', h.x, h.y, dmg); }
           if (game.thorn) { emit('thorn', h.x, h.y, 90); for (const o of list) if (!o.dead && Math.hypot(o.x - h.x, o.y - h.y) < 90 + o.r) hit(o, game.dmg * 2 * game.thorn, 0, true); }
           shove(110, 80);
@@ -1570,7 +1591,7 @@
       }
       for (const b of game.bolts) b.t -= dt;
       game.bolts = game.bolts.filter(b => b.t > 0);
-      game.enemies = list.filter(e => !e.dead); game.bullets = game.bullets.filter(b => b.life > 0 && b.x > -20 && b.x < W + 20 && b.y > -20 && b.y < H + 20);
+      game.enemies = list.filter(e => !e.dead); game.bullets = game.bullets.filter(b => b.life > 0 && Math.abs(b.x - h.x) < game.vw && Math.abs(b.y - h.y) < game.vh);
       // Crystals and honey drift to the hero inside the pickup radius, quicker and quicker; the vacuum pulls every one.
       if (game.vac && (game.vacT -= dt) <= 0) { game.vacT = Math.max(6, 22 - 4 * game.vac); game.vacOn = 1.5; emit('vac', h.x, h.y, 0); }
       game.vacOn = Math.max(0, game.vacOn - dt);
@@ -2695,6 +2716,16 @@
       return true;
     };
     game.skill = () => skill(game.player);
+    const goalPoint = () => {
+      const gl = game.goal, P0 = game.player; if (!gl) return null;
+      const nearest = list => list.reduce((m, o) => { const d = Math.hypot(o.x - P0.x, o.y - P0.y); return d < m[1] ? [o, d] : m; }, [null, 1e9])[0];
+      if (gl.goal === 'goto') { const r = ROOMS.find(r2 => r2.name === gl.room); return r && [(r.x0 + r.x1 + 1) / 2, (r.y0 + r.y1 + 1) / 2]; }
+      if (gl.goal === 'collect') { const it = nearest(game.items.filter(i => i.story)); return it && [it.x, it.y]; }
+      if (gl.goal === 'rescue') { const k = nearest(game.ents.filter(o => o.lost && !o.gone)); return k && [k.x, k.y]; }
+      if (gl.goal === 'kill') { const z = nearest(game.zombies()); return z && [z.x, z.y]; }
+      if (gl.goal === 'escape') { const m = game.story.map; return m.stairs && [m.stairs[0][0] + 0.5, m.stairs[0][1] + 0.5]; }
+      return null;
+    };
     const attack = e => {
       if (!game.story || e.zombie || e.gone || e.turning || e.atk > 0 || e.stun > 0 || game.phase !== 'play') return false;
       e.atk = 0.42; e.swing = 0.22;
@@ -2743,11 +2774,37 @@
         if (d >= 0 && d <= (e.host ? sense : sense * 0.6)) { const s = stepOn(hf, e); if (s) { if (e.bot && e.cd <= 0 && d <= 3 && random() < 0.02) skill(e); return toward(e, s[0], s[1], sp, dt); } }
       } else if (e.lost) { return;
       } else if (e.ally) {
-        // A friend keeps a step or two behind the player.
-        const pd = pf ? dist(pf, e.x, e.y) : -1;
-        const foe = game.zombies().find(z => Math.hypot(z.x - e.x, z.y - e.y) < 1.3);
-        if (foe && e.atk <= 0) { e.face = Math.atan2(foe.y - e.y, foe.x - e.x); attack(e); e.atk = 1.1; }
-        if (pd > 1 || Math.hypot(game.player.x - e.x, game.player.y - e.y) > 1.6) { const s = pf && stepOn(pf, e); if (s) toward(e, s[0], s[1], sp * (pd > 4 ? 1.15 : 1), dt); }
+        // A friend with a mind of their own: the 태권도부 charges zombies, the 보건부 guards the player, the 방송부 lures
+        // a crowd away, the others scout ahead towards the goal; all swing at zombies in reach and call out now and then.
+        const P0 = game.player, pd = pf ? dist(pf, e.x, e.y) : -1, fromP = Math.hypot(P0.x - e.x, P0.y - e.y);
+        const zs = game.zombies(), near2 = (o, r) => zs.filter(z => Math.hypot(z.x - o.x, z.y - o.y) < r);
+        const foe = zs.reduce((m, z) => { const d = Math.hypot(z.x - e.x, z.y - e.y); return d < m[1] ? [z, d] : m; }, [null, 99]);
+        if ((e.say -= dt) < 0) e.say = 0;
+        const talk = text => { if (e.say <= 0 && random() < 0.6) { e.say = 7 + random() * 5; emit('talk', e.x, e.y, 0, { who: e.id, text }); } };
+        // Skills, when they pay.
+        if (e.cd <= 0 && (e.think -= dt) <= 0) {
+          e.think = 0.3;
+          const want = { taekwon: foe[1] < 1.4, photo: near2(e, 3).length >= 2, nurse: near2(P0, 2).length > 0 && fromP < 2.4, radio: near2(e, 4).length >= 3, runner: foe[1] < 1, science: foe[1] < 2.5 && foe[1] > 1 }[e.cls];
+          if (want && skill(e)) talk({ taekwon: '이얍!', photo: '눈 감아!', nurse: '백신 맞아!', radio: '이쪽으로 와라, 좀비들아!', runner: '먼저 갈게!', science: '막았다!' }[e.cls] || '조심해!');
+        }
+        if (foe[0] && foe[1] < 1.3 && e.atk <= 0) { e.face = Math.atan2(foe[0].y - e.y, foe[0].x - e.x); attack(e); e.atk = e.cls === 'taekwon' ? 0.7 : 1.1; }
+        // Charge: the 태권도부 goes for zombies within 5 tiles, the others for ones that come within 2.5 — never far from the player.
+        const reach = e.cls === 'taekwon' ? 5 : 2.5;
+        if (foe[0] && foe[1] < reach && fromP < 8 && foe[1] > 0.9) { if (foe[1] < reach && e.cls === 'taekwon') talk('내가 막을게!'); else if (foe[1] < 2.5) talk('좀비다!'); return toward(e, foe[0].x, foe[0].y, sp, dt); }
+        // The medic and anyone far behind stay with the player.
+        if (fromP > 7 || e.cls === 'nurse') { if (pd > 1 || fromP > 1.8) { const st2 = pf && stepOn(pf, e); if (st2) toward(e, st2[0], st2[1], sp * (pd > 4 ? 1.15 : 1), dt); } return; }
+        // Scouts: walk towards the goal, up to a few tiles ahead of the player.
+        const gp = goalPoint();
+        if (gp && e.cls !== 'radio') {
+          const key = Math.floor(gp[0]) + ',' + Math.floor(gp[1]);
+          if (e.goalKey !== key) { e.goalKey = key; e.gfield = field([[Math.floor(gp[0]), Math.floor(gp[1])]]); if (Math.hypot(gp[0] - e.x, gp[1] - e.y) > 3) talk(game.goal.goal === 'collect' ? '저기 뭔가 있어!' : game.goal.goal === 'rescue' ? '누가 있는 것 같아!' : '저쪽이야!'); }
+          const dg = dist(e.gfield, e.x, e.y);
+          if (dg > 1 && fromP < 5) { const st2 = stepOn(e.gfield, e); if (st2) return toward(e, st2[0], st2[1], sp * 0.85, dt); }
+        }
+        // Otherwise loosely nearby: a few steps from the player, drifting a little.
+        if (pd > 3 || fromP > 3.2) { const st2 = pf && stepOn(pf, e); if (st2) toward(e, st2[0], st2[1], sp * 0.9, dt); }
+        else if ((e.wander -= dt) <= 0) { e.wander = 2 + random() * 2; e.drift = random() * Math.PI * 2; }
+        else if (e.drift != null && fromP < 3) slide(e, Math.cos(e.drift) * sp * 0.35, Math.sin(e.drift) * sp * 0.35, dt);
         return;
       } else if (e.bot) {
         const zd = zf ? dist(zf, e.x, e.y) : -1;
@@ -2839,7 +2896,7 @@
         else if (gl.goal === 'collect') done = gl.n >= gl.of;
         else if (gl.goal === 'survive') { done = (gl.t -= dt) <= 0; if (gl.waves && (gl.wave -= dt) <= 0) { gl.wave = gl.waves.every; for (const at2 of gl.waves.at) spawnZombie('좀비', false, at2); emit('wave', p.x, p.y, 0); } }
         else if (gl.goal === 'kill') done = gl.n >= gl.of;
-        else if (gl.goal === 'rescue') { for (const k of game.ents) if (k.lost && !k.gone && Math.hypot(k.x - p.x, k.y - p.y) < 1.1) { k.lost = false; k.ally = true; gl.n++; emit('rescued', k.x, k.y, 0, { name: k.name }); } done = gl.n >= gl.of; }
+        else if (gl.goal === 'rescue') { for (const k of game.ents) if (k.lost && !k.gone && Math.hypot(k.x - p.x, k.y - p.y) < 1.1) { k.lost = false; k.ally = true; k.say = 1.5; k.wander = 0; gl.n++; emit('rescued', k.x, k.y, 0, { name: k.name }); } done = gl.n >= gl.of; }
         else if (gl.goal === 'escape') done = at(Math.floor(p.x), Math.floor(p.y)) === STAIR;
         if (done) { emit('done', p.x, p.y, 0, { text: gl.text }); game.next(); }
         return;
@@ -2887,7 +2944,7 @@
       game.story = STORY[ep]; game.ep = ep; game.si = -1; game.ents = [p]; p.id = 0; game.items.length = 0; game.nextItem = 25; game.kills = 0;
       buildMap(game.story.map);
       [p.x, p.y] = game.story.map.start; p.face = 0;
-      for (const [name, c, dx, dy] of [['하린', 'nurse', -1, -0.6], ['도윤', 'taekwon', 0, -1.1]].concat(ep > 0 ? [['서진', 'radio', -1, 0.4]] : [])) { const f = add(name, 20, c, true); f.x = p.x + dx; f.y = p.y + dy; if (game.blocked(Math.floor(f.x), Math.floor(f.y))) { f.x = p.x; f.y = p.y; } f.ally = true; f.imm = 1e9; }
+      for (const [name, c, dx, dy] of [['하린', 'nurse', -1, -0.6], ['도윤', 'taekwon', 0, -1.1]].concat(ep > 0 ? [['서진', 'radio', -1, 0.4]] : [])) { const f = add(name, 20, c, true); f.x = p.x + dx; f.y = p.y + dy; if (game.blocked(Math.floor(f.x), Math.floor(f.y))) { f.x = p.x; f.y = p.y; } f.ally = true; f.imm = 1e9; f.say = 3 + Math.random() * 4; f.wander = 0; }
       game.next(); return true;
     };
     game.next = () => {
@@ -3251,10 +3308,11 @@
   // 젤리 생존기's rebirth: every finished run turns into stars (✦), spent on permanent perks for the next runs. Kept in
   // this browser only. [id, icon, name, effect, max level, base cost]
   const SURVIVE_META_KEY = "gfx-games-survive-meta";
-  const SURVIVE_PERKS = [
-    ['atk', '⚔️', '단단한 주먹', '시작 피해 +8%', 10, 6], ['hp', '❤️', '큰 젤리', '시작 HP +1', 5, 8], ['spd', '👟', '가벼운 발', '이동 +5%', 5, 5],
-    ['xp', '📘', '공부벌레', '경험치 +10%', 5, 6], ['cool', '⚡', '연사', '발사 간격 -5%', 5, 8], ['magnet', '🧲', '자석 주머니', '줍는 범위 +12%', 5, 4],
-    ['luck', '🍀', '행운', '치명타 +2% · 아이템 자주', 5, 6], ['card', '🎁', '출발 선물', '시작할 때 카드 +1', 3, 15], ['revive', '🌱', '두 번째 목숨', '쓰러지면 한 번 부활', 2, 30],
+  const SURVIVE_TREE = [
+    ['공격', '#E5484D', [['atk', '⚔️', '단단한 주먹', '시작 피해 +8%', 10, 1], ['cool', '⚡', '연사', '발사 간격 -5%', 5, 2], ['critP', '🎯', '치명 본능', '치명타 확률 +3%', 5, 2], ['critDmg', '💢', '치명 강타', '치명타 피해 +20%', 5, 3], ['pierceStart', '🍢', '관통 시작', '관통 꼬치 1단계를 들고 시작', 1, 6], ['boomStart', '💥', '폭발 시작', '팡팡 폭발 1단계를 들고 시작', 1, 8]]],
+    ['생존', '#3FA57A', [['hp', '❤️', '큰 젤리', '시작 HP +1', 5, 1], ['regenP', '💧', '빠른 회복', 'HP 재생 간격 -10%', 5, 2], ['dodge', '🌀', '날렵함', '부딪혀도 5% 확률로 피해 없음', 5, 2], ['honeyP', '🍯', '꿀단지', '꿀단지가 50% 더 자주', 3, 3], ['shieldStart', '🫧', '막 시작', '비눗방울 막 1단계를 들고 시작', 1, 6], ['revive', '🌱', '두 번째 목숨', '쓰러지면 한 번 부활 (최대 2번)', 2, 8]]],
+    ['도움', '#3D8BD9', [['spd', '👟', '가벼운 발', '이동 속도 +5%', 5, 1], ['magnet', '🧲', '자석 주머니', '줍는 범위 +12%', 5, 1], ['xp', '📘', '공부벌레', '경험치 +10%', 5, 2], ['luck', '🍀', '행운', '치명타 +2% · 아이템이 더 자주', 5, 2], ['card', '🎁', '출발 선물', '시작할 때 카드 +1장', 3, 4], ['orbitStart', '🍭', '방패 시작', '사탕 방패 2개를 들고 시작', 1, 6]]],
+    ['특수', '#8A63D9', [['starP', '✦', '별 수집가', '환생 별사탕 +10%', 5, 2], ['rebLv', '⏩', '빠른 환생', '환생 가능 레벨 -1', 3, 3], ['frostStart', '❄️', '얼음 시작', '얼음 사탕 1단계를 들고 시작', 1, 5], ['chainStart', '🌩️', '번개 시작', '번개 젤리 1단계를 들고 시작', 1, 6], ['beeStart', '🐝', '꿀벌 시작', '꿀벌 친구 1마리와 시작', 1, 6], ['meteorStart', '☄️', '유성 시작', '유성우 1단계를 들고 시작', 1, 8]]],
   ];
   // 야자 탈출's student card: level, experience and the last club picked, in this browser.
   const YAJA_KEY = "gfx-games-yaja";
@@ -4491,7 +4549,16 @@
         board.tabIndex = 0; board.setAttribute('role', 'application'); board.setAttribute('aria-label', g.name);
         board.append(canvas);
         const focus = () => board.focus({ preventScroll: true });
-        const toWorld = e => { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }; };
+        // Where the game's W×H sits in the canvas box: kept in proportion and centred (the rest painted in the game's
+        // ground colour). The survivor's field has a camera, so it shows more of itself instead.
+        const view = { kx: 0, ky: 0, ox: 0, oy: 0 };
+        const fitView = () => {
+          const r = canvas.getBoundingClientRect(), cw = Math.max(1, r.width), ch = Math.max(1, r.height), CAP = 1.06;
+          if (kind === 'survive') { const k = Math.min(cw / W, ch / H), tall = cw / W <= ch / H; Object.assign(view, { kx: k, ky: k, ox: tall ? 0 : (cw - W * k) / 2, oy: 0, cw, ch, vw: cw / k, vh: tall ? ch / k : H }); return; }
+          let kx = cw / W, ky = ch / H; if (ky > kx * CAP) ky = kx * CAP; else if (kx > ky * CAP) kx = ky * CAP;
+          Object.assign(view, { kx, ky, ox: (cw - W * kx) / 2, oy: (ch - H * ky) / 2, cw, ch });
+        };
+        const toWorld = e => { const r = canvas.getBoundingClientRect(); if (!view.kx) fitView(); return { x: (e.clientX - r.left - view.ox) / view.kx, y: (e.clientY - r.top - view.oy) / view.ky }; };
         const inputLife = new AbortController();
         let paintExtra = () => {}, release = () => {}, drawGame = () => {}, onStep = () => {}, sign = () => '', keyDown = () => {}, keyUp = () => {};
         st.pause = () => { release(); inputLife.abort(); };
@@ -5227,6 +5294,35 @@
           // The finger that was steering is usually still down when the cards appear: they take no input for the first 450 ms,
           // a card is chosen on release only if the same finger pressed it, and moving off it cancels.
           const READY = 450;
+          // Rebirth: from level 8 a button under the level card; the first tap arms it, a second within 2 s rebirths.
+          const REB = { x: W - 132, y: 70, w: 122, h: 28 };
+          let rebArmed = 0;
+          const inReb = p => p.x >= REB.x && p.x <= REB.x + REB.w && p.y >= REB.y && p.y <= REB.y + REB.h;
+          // The skill tree, over the board.
+          const tree = el('div', 'gfx-tree'); tree.hidden = true; stage.append(tree);
+          on(tree, 'click', e => { if (e.target === tree) { tree.hidden = true; focus(); } });
+          const fillTree = (note = '노드를 눌러 레벨 업 · 위 노드를 1 이상 올려야 아래가 열려요 · 효과는 다음 판부터') => {
+            const m = surviveMeta(), card2 = el('div', 'gfx-tree-card'), head2 = el('div', 'gfx-tree-head'), cols = el('div', 'gfx-tree-cols'), tip = el('p', 'gfx-tree-note', note);
+            head2.append(el('b', '', '🌳 스킬 트리'), el('span', '', '✦ ' + m.stars + ' · 🌱 환생 ' + m.reborn + '회'), button('✕', () => { tree.hidden = true; focus(); }, 'gfx-tree-close'));
+            for (const [branch, color, nodes] of SURVIVE_TREE) {
+              const col = el('div', 'gfx-tree-col'); col.style.setProperty('--branch', color); col.append(el('b', 'gfx-tree-branch', branch));
+              nodes.forEach(([id, icon, name, desc, max, base], i) => {
+                const lv = m.perks[id] | 0, open = i === 0 || (m.perks[nodes[i - 1][0]] | 0) > 0, cost = surviveCost(base, lv), full = lv >= max, can = open && !full && m.stars >= cost;
+                const b = button('', () => {
+                  if (!can) { tip.textContent = icon + ' ' + name + ' — ' + desc + (open ? full ? ' · 최대 레벨' : ' · ✦' + cost + ' 필요' : ' · 위 노드를 먼저 올리세요'); sfx.play('nope'); return; }
+                  const n = surviveMeta(); n.stars -= cost; n.perks[id] = lv + 1; saveSurviveMeta(n); sfx.play('power'); fillTree(icon + ' ' + name + ' Lv ' + (lv + 1) + ' — ' + desc);
+                }, 'gfx-tree-node');
+                b.append(el('i', '', icon), el('span', '', name), el('small', '', !open ? '🔒' : full ? 'MAX' : lv + '/' + max + ' · ✦' + cost));
+                b.dataset.state = !open ? 'locked' : full ? 'max' : can ? 'ready' : 'poor'; if (lv) b.dataset.has = '';
+                b.title = desc; b.setAttribute('aria-label', name + ' ' + lv + '/' + max + ' · ' + desc + (full ? ' · 최대' : open ? ' · 별사탕 ' + cost : ' · 잠김'));
+                col.append(b);
+              });
+              cols.append(col);
+            }
+            card2.append(head2, cols, tip); tree.replaceChildren(card2);
+          };
+          st.openTree = () => { release(); fillTree(); tree.hidden = false; tree.querySelector('.gfx-tree-close')?.focus({ preventScroll: true }); };
+          tools.append(button('🌳 스킬', () => st.openTree(), 'gfx-tree-open'));
           let press = null, cardsAt = 0, seen = null;
           const ready = () => performance.now() - cardsAt >= READY;
           const sync = () => {
@@ -5250,6 +5346,11 @@
             if (game.choices) {
               const i = ready() && !press ? cardAt(p) : -1;
               if (i >= 0) { press = { id: e.pointerId, i, on: true }; canvas.setPointerCapture?.(e.pointerId); }
+              return;
+            }
+            if (game.started && !game.ended && inReb(p)) {
+              if (!game.canRebirth()) { sfx.play('nope'); return; }
+              if (performance.now() - rebArmed < 2000) { rebArmed = 0; game.rebirth(); } else { rebArmed = performance.now(); sfx.play('tap'); }
               return;
             }
             canvas.setPointerCapture?.(e.pointerId);
@@ -5300,7 +5401,7 @@
             if (blast) sfx.play('hit', 1);
             if (game.hp < lastHp) { sfx.play('hurt'); navigator.vibrate?.(20); }
             lastHp = game.hp;
-            if (game.ended && !endSeen) { endSeen = true; sfx.play('lose'); navigator.vibrate?.(60); shake = 9; finish(false, game.score); }
+            if (game.ended && !endSeen) { endSeen = true; if (game.reborned) { sfx.play('win'); flash = [0.6, '170,240,170']; } else { sfx.play('lose'); navigator.vibrate?.(60); shake = 9; } finish(false, game.score); }
           };
           sign = () => [Math.floor(game.time), game.kills, game.hp, game.maxHp, game.level, !!game.choices, game.started, game.ended && game.over > 0.8].join('/');
           // A jelly blob: outlined, with two eyes.
@@ -5315,11 +5416,22 @@
           };
           // Two lines at most, broken at " · " or by width.
           // The field: Kenney's dirt in 2x2 blocks (a lighter wash on top so the sprites read) with a few plants on fixed spots.
-          const SPROUTS = Array.from({ length: 16 }, (_, i) => ({ x: 20 + (Math.imul(i + 3, 2654435761) >>> 0) % (W - 56), y: 80 + (Math.imul(i + 11, 40503) >>> 0) % (H - 130), n: [124, 125, 126, 128][i % 4] }));
+          // The field is bigger than the screen: plants and stones scattered over all of it, the camera on the hero, a fence
+          // round the edge. The dirt is laid on the world's own 72 px grid so it scrolls with it.
+          const SPROUTS = Array.from({ length: 260 }, (_, i) => ({ x: 20 + (Math.imul(i + 3, 2654435761) >>> 0) % (game.w - 56), y: 20 + (Math.imul(i + 11, 40503) >>> 0) % (game.h - 56), n: [124, 125, 126, 128][i % 4] }));
+          let camX = 0, camY = 0, VH = H;
           const field = () => {
-            if (!kDirt(0, 0, W, H, 36)) return ground();
-            fill(0, 0, W, H, css(tone().ink, null, 1, 0.22));
-            for (const p of SPROUTS) kTile(p.n, p.x, p.y, 28);
+            const x0 = Math.floor(camX / 72) * 72, y0 = Math.floor(camY / 72) * 72;
+            const ex = view.kx ? view.ox / view.kx + 2 : 0, ey = view.ky ? view.oy / view.ky + 2 : 0;
+            if (!kDirt(x0 - Math.ceil(ex / 72) * 72, y0 - Math.ceil(ey / 72) * 72, W + 144 + ex * 2 + 144, VH + 144 + ey * 2 + 144, 36)) { ctx.save(); ctx.translate(camX, camY); ground(); ctx.restore(); }
+            else fill(camX - ex, camY - ey, W + ex * 2, VH + ey * 2, css(tone().ink, null, 1, 0.22));
+            for (const p of SPROUTS) if (p.x > camX - 30 - ex && p.x < camX + W + ex && p.y > camY - 30 - ey && p.y < camY + VH + ey) kTile(p.n, p.x, p.y, 28);
+            // Beyond the fence: a darker band and posts.
+            const out = 'rgba(40,24,12,.55)';
+            if (camX < 0) fill(camX, camY, -camX, VH, out); if (camY < 0) fill(camX, camY, W, -camY, out);
+            if (camX + W > game.w) fill(game.w, camY, camX + W - game.w, VH, out); if (camY + VH > game.h) fill(camX, game.h, W, camY + VH - game.h, out);
+            ctx.strokeStyle = css(tone().line); ctx.lineWidth = 4; ctx.strokeRect(0, 0, game.w, game.h);
+            ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,240,200,.5)'; ctx.strokeRect(6, 6, game.w - 12, game.h - 12);
           };
           // The foes' two frames per kind (red drill, bat, flat drill / round bat, angry crate).
           const FOE_FRAMES = [[15, 16], [24, 25], [17, 26], [11, 12]];
@@ -5336,6 +5448,11 @@
             ctx.save();
             if (shake > 0.3) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
             ctx.imageSmoothingEnabled = false;
+            // The view: as tall (or wide) as the screen allows at the game's own scale; the model spawns just outside it.
+            VH = view.vh || H; game.setView?.(view.vw || W, VH);
+            // The camera: the hero in the middle, a little beyond the field's edge allowed so the fence shows.
+            camX = Math.max(-40, Math.min(game.w - W + 40, h.x - W / 2)); camY = Math.max(-40, Math.min(game.h - VH + 40, h.y - VH / 2));
+            ctx.translate(-Math.round(camX), -Math.round(camY));
             field();
             ctx.beginPath(); ctx.arc(h.x, h.y, game.pickup, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = css(t.line, null, 1, 0.12); ctx.stroke();
             // Crystals (a streak behind the ones flying in) and honey.
@@ -5401,7 +5518,7 @@
             for (const n of nums) { n.t -= dt; n.y -= (n.crit ? 38 : 30) * dt; ctx.globalAlpha = Math.min(1, n.t * 4); outlined(String(n.v) + (n.crit ? '!' : ''), n.x, n.y, n.heal ? 15 : n.crit ? 24 : 13, n.heal ? '#F58CC0' : n.crit ? '#FFD447' : '#ffffff'); }
             ctx.globalAlpha = 1; nums = nums.filter(n => n.t > 0);
             ctx.restore();
-            if (flash[0] > 0) fill(0, 0, W, H, 'rgba(' + flash[1] + ',' + flash[0] * 0.5 + ')');
+            if (flash[0] > 0) fill(0, 0, W, VH, 'rgba(' + flash[1] + ',' + flash[0] * 0.5 + ')');
             // Level bar, then hearts, time and level.
             ctx.beginPath(); ctx.roundRect(10, 10, W - 20, 14, 7); ink2(css(t.card), 2);
             if (game.xp > 0) { ctx.beginPath(); ctx.roundRect(10, 10, Math.max(14, (W - 20) * game.xp / game.need), 14, 7); ink2('#62D3DE', 2); }
@@ -5409,6 +5526,12 @@
             if (game.revives) label('🌱' + game.revives, 121, 48, 14, css(t.text));
             card(W / 2 - 40, 32, 80, 30, 15, css(t.card), 3); label(clock(game.time * 1000), W / 2, 48, 16, css(t.text));
             card(W - 102, 32, 92, 30, 15, css(t.card), 3); label('Lv ' + game.level, W - 56, 48, 16, css(t.text));
+            if (game.started && !game.ended) {
+              const can = game.canRebirth(), armed = can && performance.now() - rebArmed < 2000;
+              card(REB.x, REB.y, REB.w, REB.h, 14, armed ? '#FFD447' : can ? '#4FC487' : css(t.card, null, 1, 0.8), 3);
+              label(armed ? '한 번 더 누르면 환생' : can ? '🌱 환생 +' + game.stars() + '✦' : '🌱 환생 Lv ' + game.REBIRTH_LV + '부터', REB.x + REB.w / 2, REB.y + REB.h / 2 + 1, armed ? 12 : 13, can ? '#1E3A20' : css(t.text, null, 1, 0.6));
+            }
+            if (game.ended && game.reborned) outlined('🌱 환생!', W / 2, VH / 2 - 20, 40, '#8BE36B');
             // The combo: it grows and changes colour while kills keep coming, and pulses on each one.
             if (game.combo >= 3 && !game.ended) {
               const pulse = Math.max(0, 1 - (game.time - comboAt) * 6), size = 18 + Math.min(24, game.combo * 0.45) + pulse * 6;
@@ -5426,15 +5549,15 @@
               disc(stick.ax + Math.cos(a) * m, stick.ay + Math.sin(a) * m, 14, css(t.accent, null, 1, 0.7));
             }
             if (!game.started) {
-              card(28, H - 150, W - 56, 76, 20, css(t.card), 4);
-              label('화면을 끌어서 움직여요', W / 2, H - 123, 18, css(t.text));
-              label('공격은 자동 · 반짝이를 모아 레벨 업', W / 2, H - 97, 13, css(t.text, null, 1, 0.75));
+              card(28, VH - 150, W - 56, 76, 20, css(t.card), 4);
+              label('화면을 끌어서 움직여요', W / 2, VH - 123, 18, css(t.text));
+              label('공격은 자동 · 반짝이를 모아 레벨 업', W / 2, VH - 97, 13, css(t.text, null, 1, 0.75));
             }
             sync();
             if (game.choices) {
               // Cards rise and fade in while they are not yet pressable.
               const u = Math.min(1, (now - cardsAt) / READY), ease = 1 - Math.pow(1 - u, 3);
-              ctx.globalAlpha = 0.5 + 0.5 * ease; fill(0, 0, W, H, css(t.ink, null, 1, 0.78)); ctx.globalAlpha = 1;
+              ctx.globalAlpha = 0.5 + 0.5 * ease; fill(0, 0, W, VH, css(t.ink, null, 1, 0.78)); ctx.globalAlpha = 1;
               outlined(({ chest: '보물 상자!', free: '환생 선물!' })[game.choiceKind] || '레벨 업!', W / 2, 62 + Math.sin(now / 160) * 3, 34, '#FFD447');
               label(u < 1 ? '잠깐만요…' : '카드를 눌렀다 떼어 고르세요 · 1·2·3 키', W / 2, 98, 15, css(t.text, null, 1, 0.8));
               game.choices.forEach((c, i) => {
@@ -5848,6 +5971,7 @@
           game.player.lv = prof.lv;
           let pick = Math.max(0, CLS.indexOf(game.cls)), stick = null, endSeen = false, lastNow = performance.now(), shake = 0, flash = [0, ''];
           let banner = null, feed = [], rings = [], floats = [], camX = 0, camY = 0, awarded = null;
+          const bubbles = {};
           const say = (text, color = '#FFD447', secs = 2.2, sub = '') => { banner = { text, sub, color, t: secs, max: secs }; };
           const tell = text => { feed.push({ text, t: 5 }); if (feed.length > 4) feed.shift(); };
           const ring = (x, y, r, c, t = 0.5) => { if (rings.length < 14) rings.push({ x, y, r, c, t, max: t }); };
@@ -5940,6 +6064,7 @@
               else if (ev.t === 'open') { say('옥상 문이 열렸다!', '#8BE36B', 3, '복도 오른쪽 끝 계단으로 탈출하세요'); sfx.play('level'); }
               else if (ev.t === 'escape') { tell('🚁 ' + ev.name + ' 탈출'); if (seen) sfx.play('match'); }
               else if (ev.t === 'scene') typedAt = performance.now();
+              else if (ev.t === 'talk') bubbles[ev.who] = { text: ev.text, t: 2.4 };
               else if (ev.t === 'swing') { if (ev.who === p.id) sfx.play(ev.hits ? 'hit' : 'flip', ev.hits ? 2 : 1); }
               else if (ev.t === 'hit') { ring(ev.x, ev.y, 0.7, '#ffffff', 0.25); shake = Math.max(shake, ev.boss ? 3 : 2); for (let k = 0; k < 4; k++) floats.length < 16 && floats.push({ x: ev.x + (Math.random() - 0.5) * 0.6, y: ev.y, text: '✦', color: '#FFE27A', t: 0.45 }); }
               else if (ev.t === 'down') { sfx.play('slam'); ring(ev.x, ev.y, 1.4, '#8BE36B', 0.5); float(ev.x, ev.y, ev.boss ? '교감 선생님 쓰러짐!' : '처치!', '#B6F09A'); if (ev.boss) { say('교감 선생님을 쓰러뜨렸다!', '#FFD447', 2.4); shake = 10; } }
@@ -6265,6 +6390,8 @@
             ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.stroke();
             label(tag, x, ty + 7.5, 10, e === game.player ? '#ffffff' : e.host ? '#FFD0D2' : e.zombie ? '#C9F0B0' : '#ffffff');
             if (e.lost) { const a = Math.abs(Math.sin(game.phaseT * 4)) * 3; pill(x - 22, ty - 20 - a, 44, 16, 'rgba(255,255,255,.95)'); label('살려줘!', x, ty - 12 - a, 10, '#E5484D'); }
+            const bub = bubbles[e.id];
+            if (bub && !e.lost) { ctx.font = font(11); const bw = ctx.measureText(bub.text).width + 14, a = Math.min(1, bub.t * 3), by = ty - 22; ctx.globalAlpha = a; ctx.beginPath(); ctx.roundRect(x - bw / 2, by - 8, bw, 18, 9); ctx.fillStyle = 'rgba(255,255,255,.96)'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1.2; ctx.stroke(); ctx.beginPath(); ctx.moveTo(x - 4, by + 10); ctx.lineTo(x + 4, by + 10); ctx.lineTo(x, by + 15); ctx.closePath(); ctx.fill(); label(bub.text, x, by + 1.5, 11, '#2A2F55'); ctx.globalAlpha = 1; }
             if (e === game.player && !game.ended) { const a = 2 + Math.sin(game.phaseT * 5) * 2; ctx.beginPath(); ctx.moveTo(x - 5, ty - 8 - a); ctx.lineTo(x + 5, ty - 8 - a); ctx.lineTo(x, ty - 2 - a); ctx.closePath(); ctx.fillStyle = '#FFD447'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.stroke(); }
           };
           const outlined = (text, x, y, size, color, w = 0.22) => { ctx.font = font(size); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2.5, size * w); ctx.strokeStyle = '#0B0D1C'; ctx.strokeText(text, x, y); ctx.fillStyle = color; ctx.fillText(text, x, y); };
@@ -6482,6 +6609,7 @@
             for (const r of rings) r.t -= dt; rings = rings.filter(r => r.t > 0);
             for (const f of floats) f.t -= dt; floats = floats.filter(f => f.t > 0);
             for (const f of feed) f.t -= dt; feed = feed.filter(f => f.t > 0);
+            for (const k in bubbles) if ((bubbles[k].t -= dt) <= 0) delete bubbles[k];
             if (banner && (banner.t -= dt) <= 0) banner = null;
             if (game.phase === 'lobby') return lobby();
             if (game.phase === 'intro') return intro();
@@ -6989,12 +7117,15 @@
         }
 
         const draw = () => {
-          const size = Math.max(1, canvas.getBoundingClientRect().width), scale = Math.min(2, window.devicePixelRatio || 1) * size / W;
-          const width = Math.round(W * scale), height = Math.round(H * scale);
+          fitView();
+          const dpr = Math.min(2, window.devicePixelRatio || 1), width = Math.round(view.cw * dpr), height = Math.round(view.ch * dpr);
           if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
-          ctx.setTransform(width / W, 0, 0, height / H, 0, 0);
+          if (view.ox > 0.5 || view.oy > 0.5) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = kind === 'dino' ? '#ffffff' : css(tone().line, tone().ink, 0.12); ctx.fillRect(0, 0, width, height); }
+          ctx.setTransform(dpr * view.kx, 0, 0, dpr * view.ky, dpr * view.ox, dpr * view.oy);
           ctx.lineCap = 'butt'; ctx.lineJoin = 'miter'; ctx.globalAlpha = 1;
-          drawGame();
+          // The survivor's field simply shows more of itself in the bands; the other games keep to their own W×H.
+          if (kind === 'survive') return drawGame();
+          ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip(); drawGame(); ctx.restore();
         };
         paint = () => {
           if (kind === 'water' || kind === 'candy' || kind === 'bus') return paintExtra();
@@ -7010,26 +7141,12 @@
             if (game.ended && game.time - game.fail.t > 0.9) showResult('칼이 튕겨 나갔어요', '점수 ' + game.score + ' · 스테이지 ' + game.stage + ' · 사과 ' + game.apples);
           } else if (kind === 'survive') {
             chips([['⭐ ' + game.score], ['❤ ' + game.hp + '/' + game.maxHp], game.reborn > 0 && ['🌱 환생 ' + game.reborn], b0 != null && ['🏆 ' + b0.toLocaleString()]]);
-            info.textContent = '화면을 끌거나 WASD·방향키로 이동 · 공격은 자동 · 레벨 업 카드는 탭이나 1·2·3 · 쓰러지면 별사탕으로 환생 강화';
+            info.textContent = '화면을 끌거나 WASD·방향키로 이동(넓은 들판을 돌아다녀요) · 공격은 자동 · 레벨 업 카드는 탭이나 1·2·3 · Lv ' + game.REBIRTH_LV + '부터 오른쪽 위 🌱 환생(두 번 탭)으로 별사탕을 받아 🌳 스킬 트리를 올려요';
             if (game.ended && game.over > 0.8) {
-              // The run's stars are banked once, and the run counts as a rebirth.
-              if (st.awarded == null) { st.awarded = game.stars(); const m = surviveMeta(); m.stars += st.awarded; m.reborn++; saveSurviveMeta(m); }
-              const shop = card => {
-                const box = el('div', 'gfx-reborn');
-                const fill = () => {
-                  const m = surviveMeta();
-                  box.replaceChildren(el('span', 'gfx-reborn-head', '🌱 환생 ' + m.reborn + '회 · ✦ 별사탕 ' + m.stars + '개'));
-                  for (const [id, icon, name, desc, max, base] of SURVIVE_PERKS) {
-                    const lv = m.perks[id] | 0, cost = surviveCost(base, lv), full = lv >= max;
-                    const b = button('', () => { const n = surviveMeta(), l = n.perks[id] | 0, c = surviveCost(base, l); if (l >= max || n.stars < c) return; n.stars -= c; n.perks[id] = l + 1; saveSurviveMeta(n); sfx.play('power'); fill(); });
-                    b.append(el('i', '', icon), el('span', '', name + ' ' + lv + '/' + max), el('small', '', full ? '완료' : '✦' + cost));
-                    b.title = desc; b.setAttribute('aria-label', name + ' ' + lv + '/' + max + ' · ' + desc + (full ? ' · 최대' : ' · 별사탕 ' + cost));
-                    b.disabled = full || m.stars < cost; box.append(b);
-                  }
-                };
-                fill(); card.append(box);
-              };
-              showResult('젤리가 녹아 버렸어요', clock(game.time * 1000) + ' 생존 · 처치 ' + game.kills + ' · 별사탕 +' + st.awarded + '✦', shop, '🌱 환생해서 다시');
+              // The run's stars are banked once: all of them on a rebirth (which counts), 40% when the jelly melted.
+              if (st.awarded == null) { st.awarded = game.points(); const m = surviveMeta(); m.stars += st.awarded; if (game.reborned) m.reborn++; saveSurviveMeta(m); }
+              const treeButton = card => card.append(button('🌳 스킬 트리 (✦ ' + surviveMeta().stars + ')', () => st.openTree?.(), 'gfx-tree-open'));
+              showResult(game.reborned ? '🌱 환생!' : '젤리가 녹아 버렸어요', clock(game.time * 1000) + ' · Lv ' + game.level + ' · 처치 ' + game.kills + ' · 별사탕 +' + st.awarded + '✦' + (game.reborned ? '' : ' (쓰러지면 40%만 · Lv ' + game.REBIRTH_LV + '부터 환생하면 전부)'), treeButton, game.reborned ? '🌱 새로 시작' : '다시 하기');
             }
           } else if (kind === 'zombie') {
             chips([['🗝 ' + game.keys + '/' + game.NEED], ['👥 ' + game.humans() + (game.saved ? ' · 탈출 ' + game.saved : '')], b0 != null && ['🏆 ' + b0.toLocaleString()]]);
@@ -7095,6 +7212,23 @@
    * capsule for buttons, a red one for the picked or main button, a grey one when disabled, a framed cream panel. */
   const KENNEY_UI = { button: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAABGdBTUEAALGPC/xhBQAAAA9QTFRFAAAAo3A6xYdH//HSbUsnANKYsQAAAAF0Uk5TAEDm2GYAAAAqSURBVAjXY2DAACwuYODA4AIFDC5CSkCgCGQoGwOBEakMuHaYgXArMAAAvqsUdSpxfoEAAAAASUVORK5CYII=', pick: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAgMAAABinRfyAAAABGdBTUEAALGPC/xhBQAAAAxQTFRFAAAA7Gpfz15Tjj84WA+56wAAAAF0Uk5TAEDm2GYAAAAnSURBVAjXY2CAA/v///8w/AcChp+hofkM31atmo+bACsBKwZrgwMAo7EkBXhFaI4AAAAASUVORK5CYII=', off: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAgMAAABinRfyAAAABGdBTUEAALGPC/xhBQAAAAxQTFRFAAAAlK/Gd42fUV9rTn9+UQAAAAF0Uk5TAEDm2GYAAAAnSURBVAjXY2CAA/v///8w/AcChp+hofkM31atmo+bACsBKwZrgwMAo7EkBXhFaI4AAAAASUVORK5CYII=', panel: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAABGdBTUEAALGPC/xhBQAAAA9QTFRFAAAAo3A6//HSxYdHbUsnNe8zQwAAAAF0Uk5TAEDm2GYAAAAySURBVAjXY2BxAQMHBhcoYHARNgYCQyDDGAxADEEgADOElJQUSWfAtcMMhFsBsxTmDAAgqBlfoJlVIQAAAABJRU5ErkJggg==' };
   const CSS_MORE = `
+/* 젤리 생존기's skill tree: three branches side by side, nodes joined by a line, over the board. */
+.gfx-tree { position:absolute; inset:0; z-index:4; display:grid; place-items:center; padding:6px; border-radius:16px; background:color-mix(in srgb,var(--gfx-ink, #FFF4D9) 62%,transparent); }
+.gfx-tree[hidden] { display:none; }
+.gfx-tree-card { width:min(520px, 100%); max-height:100%; overflow:auto; display:grid; gap:.5em; padding:.7em; background:var(--gfx-card, #FFFDF5); border:3px solid var(--gfx-line, #6B4528); border-radius:20px; box-shadow:0 5px 0 var(--gfx-line, #6B4528); animation:gfx-game-pop .3s cubic-bezier(.3,1.6,.5,1) both; }
+.gfx-tree-head { display:flex; align-items:center; gap:.5em; } .gfx-tree-head b { font-size:1.2em; font-weight:normal; color:var(--gfx-accent, #F0763A); } .gfx-tree-head span { margin-left:auto; font-size:.85em; }
+.gfx-load-games .gfx-tree-head .gfx-tree-close { padding:.1em .6em; }
+.gfx-tree-cols { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:.3em; }
+.gfx-tree-col { position:relative; display:flex; flex-direction:column; gap:.6em; padding:.4em .3em .6em; border-radius:14px; background:color-mix(in srgb,var(--branch) 12%,transparent); }
+.gfx-tree-col::before { content:""; position:absolute; left:50%; top:2.4em; bottom:1.4em; width:4px; transform:translateX(-50%); border-radius:2px; background:color-mix(in srgb,var(--branch) 50%,transparent); }
+.gfx-tree-branch { text-align:center; font-weight:normal; color:color-mix(in srgb,var(--branch) 75%,#000); }
+.gfx-load-games .gfx-tree-node { position:relative; display:grid; justify-items:center; gap:.05em; padding:.3em .1em; border-radius:12px; font-size:.7em; line-height:1.12; background:var(--gfx-card, #FFFDF5); word-break:keep-all; }
+.gfx-tree-node i { font-style:normal; font-size:1.6em; line-height:1.1; } .gfx-tree-node small { font-size:.85em; opacity:.8; }
+.gfx-tree-node[data-state="locked"] > * { opacity:.45; filter:grayscale(1); }
+.gfx-load-games .gfx-tree-node[data-state="ready"] { border-color:var(--branch); box-shadow:0 3px 0 var(--branch); }
+.gfx-tree-node[data-has] { background:color-mix(in srgb,var(--branch) 20%,var(--gfx-card, #FFFDF5)) !important; }
+.gfx-tree-node[data-state="max"] small { color:var(--gfx-accent, #F0763A); opacity:1; }
+.gfx-tree-note { margin:0; min-height:2.4em; font-size:.8em; text-align:center; opacity:.85; }
 /* 젤리 생존기's rebirth shop on its result card: two columns of small perk buttons. */
 .gfx-reborn { display:grid; grid-template-columns:1fr 1fr; gap:4px; width:min(310px, 78vw); margin:.2em 0; font-size:.78em; }
 .gfx-reborn-head { grid-column:1 / -1; text-align:center; font-size:1.1em; }
@@ -7207,7 +7341,7 @@
     + " .gfx-load-games > .gfx-game-nav { display:none; }"
     + " .gfx-game-content { flex:1; min-height:0; padding:4px 4px 6px; border-width:2px; border-radius:16px; }"
     + " .gfx-game-head { margin-bottom:4px; flex-wrap:nowrap; gap:6px; } .gfx-game-head > .gfx-game-title { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:1em; }"
-    + " .gfx-game-head > .gfx-game-stats { margin-left:auto; flex:0 1 auto; } .gfx-game-board { padding:3px; }"
+    + " .gfx-game-head > .gfx-game-stats { margin-left:auto; flex:0 1 auto; min-width:0; flex-wrap:wrap; justify-content:flex-end; row-gap:3px; } .gfx-game-board { padding:3px; } .gfx-game-content { overflow-x:hidden; }"
     + " .gfx-menu-toggle { display:block; flex:none; order:0; font-size:.9em !important; padding:.15em .65em !important; line-height:1.2; }"
     + " :host(:not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 50px); }"
     + " .gfx-sheet { display:flex; flex-direction:column; gap:9px; position:absolute; inset:0; z-index:8; padding:12px 12px 16px; overflow-y:auto; overscroll-behavior:contain;"
@@ -7226,6 +7360,13 @@
     + " .gfx-sheet .gfx-game-utils > :last-child { display:none; } .gfx-sheet .gfx-game-util { font-size:.85em !important; }"
     + " .gfx-sheet label { display:flex; align-items:center; gap:.4em; font-size:.9em; } .gfx-sheet select { font:inherit; font-size:16px; color:var(--gfx-text, #5A3A24); background:var(--gfx-card, #FFFDF5); border:2.5px solid var(--gfx-line, #6B4528); border-radius:999px; padding:.15em .7em; }"
     + " .gfx-rotate { inset:44px 0 0 !important; } }"
+    // Phones: no frames and no bands. The game box loses its border and padding, the board fills all the room under the
+    // title row (canvas games fill it in proportion, the survivor showing more of its field).
+    + "@media (max-width:640px), (orientation:landscape) and (max-height:520px) { .gfx-game-content { padding:0 !important; border:0 !important; border-radius:0 !important; box-shadow:none !important; }"
+    + " .gfx-game-head { padding:4px 6px 2px; } .gfx-game-stage { flex:1; min-height:0; display:flex; flex-direction:column; }"
+    + " .gfx-game-board:has(> .gfx-arcade-canvas) { width:100% !important; max-width:none; flex:1 1 auto; min-height:0; display:flex; flex-direction:column; gap:0; padding:0 !important; border-radius:0 !important; background:none; }"
+    + " .gfx-game-board > .gfx-arcade-canvas { flex:1 1 auto; min-height:0; width:100%; height:auto; aspect-ratio:auto !important; border:0; border-radius:0; }"
+    + " .gfx-game-board > .gfx-arcade-pad { flex:none; margin:4px 6px; } }"
     // Upright: the game box reaches the bottom and the board sits in the middle of it.
     + "@media (max-width:640px) { .gfx-load-games { height:100%; } .gfx-game-content { display:flex; flex-direction:column; } .gfx-game-stage { flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center; } }"
     // On its side the height is what is short: ☰, the name and the scores stack in a narrow column on the left and the

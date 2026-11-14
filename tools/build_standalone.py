@@ -32,7 +32,7 @@ MOUNT = r"""
     + " .gfx-load-games > .gfx-game-nav { display:none; }"
     + " .gfx-game-content { flex:1; min-height:0; padding:4px 4px 6px; border-width:2px; border-radius:16px; }"
     + " .gfx-game-head { margin-bottom:4px; flex-wrap:nowrap; gap:6px; } .gfx-game-head > .gfx-game-title { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:1em; }"
-    + " .gfx-game-head > .gfx-game-stats { margin-left:auto; flex:0 1 auto; } .gfx-game-board { padding:3px; }"
+    + " .gfx-game-head > .gfx-game-stats { margin-left:auto; flex:0 1 auto; min-width:0; flex-wrap:wrap; justify-content:flex-end; row-gap:3px; } .gfx-game-board { padding:3px; } .gfx-game-content { overflow-x:hidden; }"
     + " .gfx-menu-toggle { display:block; flex:none; order:0; font-size:.9em !important; padding:.15em .65em !important; line-height:1.2; }"
     + " :host(:not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 50px); }"
     + " .gfx-sheet { display:flex; flex-direction:column; gap:9px; position:absolute; inset:0; z-index:8; padding:12px 12px 16px; overflow-y:auto; overscroll-behavior:contain;"
@@ -51,6 +51,13 @@ MOUNT = r"""
     + " .gfx-sheet .gfx-game-utils > :last-child { display:none; } .gfx-sheet .gfx-game-util { font-size:.85em !important; }"
     + " .gfx-sheet label { display:flex; align-items:center; gap:.4em; font-size:.9em; } .gfx-sheet select { font:inherit; font-size:16px; color:var(--gfx-text, #5A3A24); background:var(--gfx-card, #FFFDF5); border:2.5px solid var(--gfx-line, #6B4528); border-radius:999px; padding:.15em .7em; }"
     + " .gfx-rotate { inset:44px 0 0 !important; } }"
+    // Phones: no frames and no bands. The game box loses its border and padding, the board fills all the room under the
+    // title row (canvas games fill it in proportion, the survivor showing more of its field).
+    + "@media (max-width:640px), (orientation:landscape) and (max-height:520px) { .gfx-game-content { padding:0 !important; border:0 !important; border-radius:0 !important; box-shadow:none !important; }"
+    + " .gfx-game-head { padding:4px 6px 2px; } .gfx-game-stage { flex:1; min-height:0; display:flex; flex-direction:column; }"
+    + " .gfx-game-board:has(> .gfx-arcade-canvas) { width:100% !important; max-width:none; flex:1 1 auto; min-height:0; display:flex; flex-direction:column; gap:0; padding:0 !important; border-radius:0 !important; background:none; }"
+    + " .gfx-game-board > .gfx-arcade-canvas { flex:1 1 auto; min-height:0; width:100%; height:auto; aspect-ratio:auto !important; border:0; border-radius:0; }"
+    + " .gfx-game-board > .gfx-arcade-pad { flex:none; margin:4px 6px; } }"
     // Upright: the game box reaches the bottom and the board sits in the middle of it.
     + "@media (max-width:640px) { .gfx-load-games { height:100%; } .gfx-game-content { display:flex; flex-direction:column; } .gfx-game-stage { flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center; } }"
     // On its side the height is what is short: ☰, the name and the scores stack in a narrow column on the left and the
@@ -219,7 +226,7 @@ HTML = """<!doctype html>
     label .tag { display:none; }
     select { max-width:9em; padding:.1em .6em; }
     header { display:none; }
-    #games { min-height:0; padding:6px max(6px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)); }
+    #games { min-height:0; padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
   }
   /* Phones on their side: no title row, the games get the whole height. The picker sits at the top of the game
      list on the right, which leaves it 46px. */
@@ -231,7 +238,7 @@ HTML = """<!doctype html>
     label { flex:1; min-width:0; } select { width:100%; }
     header { display:none !important; }
     select { padding:.15em .6em; }
-    #games { min-height:0; padding:6px max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
+    #games { min-height:0; padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
   }
 </style>
 </head>

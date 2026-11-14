@@ -12,7 +12,8 @@ const LEVELS = ['easiest', 'easy', 'normal', 'hard', 'expert'];
 const go = g => g.dirAt(g.n + 1) === g.face ? g.climb() : g.turn();
 const run = (g, seconds) => { for (let i = 0; i < seconds * 20 && !g.ended && !g.choices; i++) g.step(50); };
 
-const blob = (g, x, y, hp = 1, extra = {}) => { const e = { x, y, hp, max: hp, speed: 0, r: 10, kind: 0, hit: 0, push: 0, dmg: 1, ...extra }; g.enemies.push(e); return e; };
+// Positions are given as on the old 360×520 field round the hero at its middle (180, 260); the field is bigger now.
+const blob = (g, x, y, hp = 1, extra = {}) => { const e = { x: x + g.hero.x - 180, y: y + g.hero.y - 260, hp, max: hp, speed: 0, r: 10, kind: 0, hit: 0, push: 0, dmg: 1, ...extra }; g.enemies.push(e); return e; };
 // A player of middling skill: steps away from close blobs, drifts to crystals, takes a random card.
 const kite = (g, r, seconds) => {
   for (let i = 0; i < seconds * 30 && !g.ended; i++) {
@@ -22,7 +23,7 @@ const kite = (g, r, seconds) => {
       for (const e of g.enemies) { const dx = h.x - e.x, dy = h.y - e.y, d = Math.hypot(dx, dy) || 1; if (d < 110) { const w = (110 - d) / d / d * 60; fx += dx * w; fy += dy * w; } }
       let tg = null, bd = 170; for (const c of g.gems.concat(g.honey)) { const d = Math.hypot(c.x - h.x, c.y - h.y); if (d < bd) { bd = d; tg = c; } }
       if (tg) { fx += (tg.x - h.x) / bd * 0.5; fy += (tg.y - h.y) / bd * 0.5; }
-      g.aim(fx + (180 - h.x) / 180 * 0.4, fy + (260 - h.y) / 260 * 0.4);
+      g.aim(fx + (g.w / 2 - h.x) / 180 * 0.4, fy + (g.h / 2 - h.y) / 260 * 0.4);
     }
     g.step(33); g.take();
   }
@@ -66,7 +67,7 @@ test('Survive: a level-up pauses the run and offers 3 cards; picking one applies
 });
 test('Survive: contact hurts once per second of invulnerability and the run ends at 0 HP', () => {
   const g = games.newSurviveGame(rng(), 'hard'); g.start();
-  const hp = g.hp, touch = () => blob(g, g.hero.x, g.hero.y, 99);
+  const hp = g.hp, touch = () => blob(g, 180, 260, 99);
   touch(); g.step(50); assert.equal(g.hp, hp - 1);
   g.step(50); assert.equal(g.hp, hp - 1, 'brief invulnerability');
   for (let i = 0; i < 400 && !g.ended; i++) { touch(); g.step(250); }
@@ -118,7 +119,7 @@ test('Survive: spread, piercing, explosion, lightning, vacuum, orbit, regen and 
   const l = games.newSurviveGame(() => 0, 'normal'); l.start(); l.spawnAcc = 0; l.rate = () => 0; up('chain', l);
   const first = blob(l, 215, 260, 5), second = blob(l, 215, 320, 5); l.step(250); assert.ok(second.hp < 5, 'zapped'); assert.ok(first.hp < 5);
   // Vacuum: a far crystal flies to the hero.
-  const v = games.newSurviveGame(rng(), 'normal'); v.start(); v.spawnAcc = 0; v.rate = () => 0; up('vac', v); v.gems.push({ x: 20, y: 20, v: 1, sp: 0 }); for (let i = 0; i < 6; i++) v.step(250); assert.equal(v.gems.length, 0); assert.ok(v.xp > 0 || v.level > 1);
+  const v = games.newSurviveGame(rng(), 'normal'); v.start(); v.spawnAcc = 0; v.rate = () => 0; up('vac', v); v.gems.push({ x: v.hero.x - 160, y: v.hero.y - 240, v: 1, sp: 0 }); for (let i = 0; i < 6; i++) v.step(250); assert.equal(v.gems.length, 0); assert.ok(v.xp > 0 || v.level > 1);
   // Bigger and faster orbit with more candies.
   const o2 = games.newSurviveGame(rng(), 'normal'), o4 = games.newSurviveGame(rng(), 'normal'); o2.start(); o4.start(); o2.spawnAcc = o4.spawnAcc = 0; o2.rate = o4.rate = () => 0;
   up('orbit', o2); up('orbit', o4); up('orbit', o4); assert.equal(o4.orbit, 4); o2.step(250); o4.step(250); assert.ok(o4.spin > o2.spin);
@@ -133,9 +134,9 @@ test('Survive: the new cards (frost, nova, thorn, bees, size, bubble, greed, met
   assert.ok(fe.slow > 0, 'a hit chills');
   const nv = quiet(games.newSurviveGame(rng(), 'normal')); up('nova', nv); const ne = blob(nv, 230, 260, 99); nv.step(250); nv.step(250); nv.step(250); nv.step(250); nv.step(250);
   assert.ok(nv.take().some(e => e.t === 'nova') && ne.hp < 99, 'the nova pulses and hurts');
-  const th = quiet(games.newSurviveGame(rng(), 'normal')); up('thorn', th); up('thorn', th); const tb = blob(th, th.hero.x, th.hero.y, 99, { dmg: 2 }); const hp = th.hp; th.step(20);
+  const th = quiet(games.newSurviveGame(rng(), 'normal')); up('thorn', th); up('thorn', th); const tb = blob(th, 180, 260, 99, { dmg: 2 }); const hp = th.hp; th.step(20);
   assert.equal(th.hp, hp - 1, 'thorns take a point off a bump'); assert.ok(tb.hp < 99, 'and prick back');
-  const bb = quiet(games.newSurviveGame(rng(), 'normal')); up('bubble', bb); blob(bb, bb.hero.x, bb.hero.y, 99, { dmg: 3 }); const hb = bb.hp; bb.step(20);
+  const bb = quiet(games.newSurviveGame(rng(), 'normal')); up('bubble', bb); blob(bb, 180, 260, 99, { dmg: 3 }); const hb = bb.hp; bb.step(20);
   assert.equal(bb.hp, hb, 'the bubble takes the first hit'); assert.equal(bb.shield, 0);
   const be = quiet(games.newSurviveGame(rng(), 'normal')); up('bee', be); be.cool = be.fire = 99; blob(be, 300, 120, 99); be.step(50);
   assert.ok(be.bullets.length > 0, 'a bee stings');
@@ -154,7 +155,7 @@ test('Survive: field items — a big blob drops a chest that offers a card; bomb
   assert.ok(far.dead, 'a bomb clears the screen');
   const z = quiet(games.newSurviveGame(rng(), 'normal')); const fz = blob(z, 40, 40, 99, { speed: 50 }); z.items.push({ x: z.hero.x, y: z.hero.y, kind: 'freeze', sp: 0 }); z.step(20); const x0 = fz.x; z.step(250);
   assert.ok(z.freeze > 0 && fz.x === x0, 'a freeze stops the blobs');
-  const m = quiet(games.newSurviveGame(rng(), 'normal')); m.gems.push({ x: 10, y: 10, v: 1, sp: 0 }); m.items.push({ x: m.hero.x, y: m.hero.y, kind: 'magnet', sp: 0 }); for (let i = 0; i < 6; i++) m.step(250);
+  const m = quiet(games.newSurviveGame(rng(), 'normal')); m.gems.push({ x: m.hero.x - 170, y: m.hero.y - 250, v: 1, sp: 0 }); m.items.push({ x: m.hero.x, y: m.hero.y, kind: 'magnet', sp: 0 }); for (let i = 0; i < 6; i++) m.step(250);
   assert.equal(m.gems.length, 0, 'a magnet pulls every crystal');
   const big = quiet(games.newSurviveGame(rng(), 'normal')); const e = blob(big, 200, 200, 1, { big: true }); big.dmg = 99; big.step(250); big.step(250);
   assert.ok(e.dead && big.items.some(i => i.kind === 'chest'), 'a big blob leaves a chest');
@@ -164,14 +165,14 @@ test('Survive: rebirth perks make the start stronger, revive once, give free car
   assert.ok(p.dmg > base.dmg * 1.39 && p.maxHp === base.maxHp + 3 && p.speed > base.speed && p.xpMul > 1.19);
   p.start(); assert.ok(p.choices && p.choiceKind === 'free' && p.pending === 1, 'free cards wait at the start');
   p.pick(0); p.pick(0); assert.equal(p.choices, null);
-  p.spawnAcc = 0; p.rate = () => 0; p.hp = 1; blob(p, p.hero.x, p.hero.y, 99, { dmg: 5 }); p.step(20);
+  p.spawnAcc = 0; p.rate = () => 0; p.hp = 1; blob(p, 180, 260, 99, { dmg: 5 }); p.step(20);
   assert.ok(!p.ended && p.hp === p.maxHp && p.revives === 0, 'a revive brings the hero back');
   const s = games.newSurviveGame(rng(), 'normal', { reborn: 10 }), s0 = games.newSurviveGame(rng(), 'normal'); s.time = s0.time = 120; s.kills = s0.kills = 200;
   assert.ok(s0.stars() > 0 && s.stars() > s0.stars(), 'stars, more after rebirths');
 });
 test('Survive: kills build a combo that resets after a pause, and the events stay capped', () => {
   const g = games.newSurviveGame(rng(), 'normal'); g.start(); g.spawnAcc = 0; g.rate = () => 0;
-  g.cool = 0.1; for (let i = 0; i < 5; i++) blob(g, g.hero.x + 60 + i * 12, g.hero.y, 1); for (let i = 0; i < 6; i++) { if (g.choices) g.pick(0); g.step(250); }
+  g.cool = 0.1; for (let i = 0; i < 5; i++) blob(g, 180 + 60 + i * 12, 260, 1); for (let i = 0; i < 6; i++) { if (g.choices) g.pick(0); g.step(250); }
   assert.ok(g.combo >= 3 && g.comboMax === g.combo, 'combo ' + g.combo);
   assert.ok(g.take().some(e => e.t === 'kill' && e.combo >= 2));
   g.cool = 99; g.fire = 99; for (let i = 0; i < 14; i++) { if (g.choices) g.pick(0); g.step(250); } assert.equal(g.combo, 0, 'reset after 2.2 s');
@@ -373,4 +374,14 @@ test('Dash: the stage theme changes about every 900 m, and platforms and power-u
   let platforms = 0, powers = new Set(), hearts = 0;
   for (let i = 0; i < 80; i++) { const d = games.newDashGame(rng(i + 3), 'normal'); d.started = true; d.nextPower = 0; d.nextHeart = 0; d.distance = 5000; d.gap = 0; d.step(1); platforms += d.platforms.length; for (const it of d.items) { if (['magnet', 'giant', 'sprint'].includes(it.kind)) powers.add(it.kind); if (it.kind === 'heart') hearts++; } }
   assert.ok(platforms > 10, 'floating platforms: ' + platforms); assert.equal(powers.size, 3, 'all three power-ups appear'); assert.equal(hearts, 80);
+});
+test('Survive: rebirth is the player\'s call from level 8 and pays every star; melting pays 40%; tree perks start the run stronger', () => {
+  const g = games.newSurviveGame(rng(), 'normal'); g.start(); g.spawnAcc = 0; g.rate = () => 0;
+  assert.ok(!g.canRebirth() && !g.rebirth(), 'not before level 8');
+  g.level = 8; g.time = 120; g.kills = 300; assert.ok(g.canRebirth());
+  const full = g.stars(); assert.ok(g.rebirth() && g.ended && g.reborned); assert.equal(g.points(), full);
+  const d = games.newSurviveGame(rng(), 'normal'); d.start(); d.level = 8; d.time = 120; d.kills = 300; d.ended = true;
+  assert.equal(d.points(), Math.floor(d.stars() * 0.4), 'a melted run pays 40%');
+  const base = games.newSurviveGame(rng(), 'normal'), p = games.newSurviveGame(rng(), 'normal', { critP: 2, regenP: 3, boomStart: 1, shieldStart: 1 });
+  assert.ok(p.crit > base.crit + 0.05 && p.regenEvery < base.regenEvery && p.boom === 1 && p.shield === 1 && p.bubble === 1);
 });
