@@ -115,7 +115,7 @@ Kenney의 효과음(CC0, 아래 '에셋 출처')을 씁니다: 버튼·선택은
 
 ## 설치
 
-마리나라 설정의 개인 확장에서 `Gacha-Mini-Games-1.14.2.personal-extension.zip`을 설치합니다.
+마리나라 설정의 개인 확장에서 `Gacha-Mini-Games-1.14.3.personal-extension.zip`을 설치합니다.
 
 생성 화면이 2.5초 이상 이어지면 미니게임이 나타납니다.
 
@@ -125,6 +125,10 @@ Kenney의 효과음(CC0, 아래 '에셋 출처')을 씁니다: 버튼·선택은
 node --test tools/test-loading.mjs tools/test-extra-games.mjs tools/test-difficulty.mjs
 node tools/test-games-browser.mjs  # Windows의 Microsoft Edge 필요
 ```
+
+## 1.14.3
+
+귀에 거슬리던 효과음을 다듬었습니다. 효과음 파일마다 녹음 크기가 30dB 넘게 달라서(확인음은 아주 크고 칼 뽑는 소리는 거의 안 들림), 파일별로 음량을 맞추고 고음이 많은 소리는 조금 더 줄였습니다. 유리 소리(뽁뽁이, 사탕, 물 정리, 생존기, 보석 캐기)와 금속 걸쇠 소리는 원래보다 빠르게(=높게) 재생하지 않고 오히려 낮춰서 재생하며, 전체 출력에 부드러운 고역 차단 필터(6.5kHz)를 넣어 날카로운 끝을 깎았습니다.
 
 ## 1.14.2
 
