@@ -80,3 +80,36 @@ test('the harder levels leave fewer students standing (the player kept still in 
   const easy = left('easiest'), hard = left('expert');
   assert.ok(easy > hard, easy + ' > ' + hard);
 });
+test('story: scenes advance by tap, goals spawn zombies and items, friends follow, and an episode ends cleared', () => {
+  const g = newNightSchoolGame(rng(5), 'normal', 'runner');
+  assert.ok(g.startStory(0) && g.phase === 'scene' && g.ents.filter(e => e.ally).length === 2);
+  const x0 = g.player.x; g.aim(1, 0); g.step(500); assert.equal(g.player.x, x0, 'nothing moves during a scene');
+  while (g.phase === 'scene') g.advance();
+  assert.equal(g.goal.goal, 'goto'); assert.equal(g.zombies().length, 2);
+  // Walk into the 보건실 by placing the player there; the next scene starts.
+  const room = g.ROOMS.find(r => r.name === '보건실'); g.player.x = room.x0 + 2.5; g.player.y = room.y0 + 1.5; g.step(50);
+  assert.equal(g.phase, 'scene'); while (g.phase === 'scene') g.advance();
+  assert.equal(g.goal.goal, 'collect'); const kit = g.items.find(i => i.story); assert.ok(kit && kit.kind === 'kit');
+  for (const z of g.zombies()) z.gone = true;
+  g.player.x = kit.x; g.player.y = kit.y; g.step(50); assert.equal(g.phase, 'scene', 'the kit picked up');
+  while (g.phase === 'scene') g.advance();
+  assert.equal(g.goal.goal, 'survive'); for (const z of g.zombies()) z.gone = true; for (let i = 0; i < 160 && g.phase === 'play'; i++) g.step(250);
+  while (g.phase === 'scene') g.advance(); assert.equal(g.goal.goal, 'goto');
+  // Friends keep up with the player.
+  const f = g.ents.find(e => e.ally); for (const z of g.zombies()) z.gone = true; g.player.x = 20.5; g.player.y = 11.5; for (let i = 0; i < 40; i++) g.step(250);
+  assert.ok(Math.hypot(f.x - g.player.x, f.y - g.player.y) < 3, 'a friend follows');
+  const t = g.ROOMS.find(r => r.name === '교무실'); g.player.x = t.x0 + 1.5; g.player.y = t.y0 + 6.5; g.step(50);
+  while (g.phase === 'scene') g.advance();
+  assert.ok(g.ended && g.won && g.why === 'story' && g.score > 0 && g.xp > 100);
+});
+test('story: caught means a retry from the same spot, not a zombie; bosses and hidden classmates', () => {
+  const g = newNightSchoolGame(rng(6), 'normal', 'runner'); g.startStory(2); while (g.phase === 'scene') g.advance();
+  assert.equal(g.goal.goal, 'rescue'); assert.ok(g.zombies().some(z => z.boss), 'the boss comes back');
+  const lost = g.ents.filter(e => e.lost); assert.equal(lost.length, 2);
+  const z = g.zombies()[0]; z.x = g.player.x + 0.4; z.y = g.player.y; z.stun = 0; z.caught = 0; g.step(50);
+  assert.ok(g.ended && !g.won && g.why === 'caught' && !g.player.zombie);
+  assert.ok(g.retry() && !g.ended && g.player.imm > 0 && g.zombies().every(o => Math.hypot(o.x - g.player.x, o.y - g.player.y) >= 7.9));
+  for (const k of lost) { g.player.x = k.x; g.player.y = k.y; g.step(50); }
+  assert.ok(lost.every(k => k.ally && !k.lost)); while (g.phase === 'scene') g.advance();
+  assert.ok(g.goal.goal === 'escape' && g.open);
+});

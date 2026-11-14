@@ -32,7 +32,8 @@
   h1 small { font-size:.6em; opacity:.6; margin-left:.4em; }
   label { display:flex; align-items:center; gap:.4em; font-size:.9em; }
   select { font:inherit; color:var(--gfx-text); background:var(--gfx-card); border:2.5px solid var(--gfx-line); border-radius:999px; padding:.2em .8em; box-shadow:0 2px 0 var(--gfx-line); }
-  #fullscreen { display:none; flex:none; font:inherit; font-size:1.05em; line-height:1; color:var(--gfx-text); background:var(--gfx-card); border:2.5px solid var(--gfx-line); border-radius:999px; padding:.2em .55em; box-shadow:0 2px 0 var(--gfx-line); cursor:pointer; }
+  #fullscreen { display:none; }
+  header #fullscreen:not([hidden]) { display:block; flex:none; font:inherit; font-size:.9em; color:var(--gfx-text); background:var(--gfx-card); border:2.5px solid var(--gfx-line); border-radius:999px; padding:.2em .8em; box-shadow:0 2px 0 var(--gfx-line); cursor:pointer; }
   #games { flex:1; min-height:520px; display:block; padding:10px 12px 12px; }
   /* Phones: one slim header row and the games fill the rest of the screen, clear of the notch and the home bar.
      The picker keeps 16px type so iOS does not zoom in when it opens. */
@@ -44,10 +45,7 @@
     h1 small { margin-left:.3em; }
     label .tag { display:none; }
     select { max-width:9em; padding:.1em .6em; }
-    label { margin-left:auto; }
-    #fullscreen:not([hidden]) { display:block; padding:.1em .5em; }
-    /* The menu's first fold: folded, the title row goes too and the games take the whole screen. */
-    body:not([data-menu]) header { display:none; }
+    header { display:none; }
     #games { min-height:0; padding:6px max(6px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)); }
   }
   /* Phones on their side: no title row, the games get the whole height. The picker sits at the top of the game
@@ -58,8 +56,7 @@
     header { position:absolute; z-index:1; top:6px; right:max(8px, env(safe-area-inset-right)); width:150px; padding:0; flex-wrap:nowrap; gap:5px; }
     h1, label .tag { display:none; }
     label { flex:1; min-width:0; } select { width:100%; }
-    #fullscreen:not([hidden]) { display:block; padding:.1em .45em; }
-    body:not([data-menu]) header { display:none; }
+    header { display:none !important; }
     select { padding:.15em .6em; }
     #games { min-height:0; padding:6px max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
   }
@@ -67,7 +64,7 @@
 </head>
 <body>
 <header>
-  <h1>🎮 Gacha Mini Games<small>v1.16.0</small></h1>
+  <h1>🎮 Gacha Mini Games<small>v1.17.0</small></h1>
   <label><span class="tag">테마</span>
     <select id="preset" aria-label="테마">
       <option value="cream">크림 코코아</option>
@@ -88,7 +85,7 @@
 </header>
 <div id="games"></div>
 <script>
-/* Gacha Mini Games v1.16.0 — personal extension for Gacha Forge on Marinara Engine.
+/* Gacha Mini Games v1.17.0 — personal extension for Gacha Forge on Marinara Engine.
  * While a chapter or story is being generated, the generation screen gets a column of small games on its right:
  * 지뢰찾기, 사과 상자 (the fruit follows the 말랑 colour preset), 2048, 짝 맞추기, 쿠키 가게, 디저트 핀볼 and more. Closing the column or
  * finishing generation removes them; nothing here touches the run, rewards or the generation request.
@@ -2518,6 +2515,33 @@
     const ZSKILL = ['🧟', '좀비', '포효', '3초 동안 빨라지고 주변 학생이 느려져요', 12];
     const NAMES = ['민준', '서연', '하린', '도윤', '지우', '예준', '수아', '시우', '하은', '준서', '지아', '유나', '은우', '서진', '채원', '태오', '소율', '건우'];
     const ROOMS = [];
+    const STORY = [
+      { title: '깜빡이는 교실', sub: '야자 시간, 무언가 이상하다', steps: [
+        { say: [['하린', '야, 일어나! 또 엎드려 자고 있었어?'], ['나', '…으음. 몇 시야?'], ['하린', '9시 50분. 근데 복도 불이 계속 깜빡여.'], ['방송', '📢 학생 여러분, 지금 즉시 교실 문을… 지지직—'], ['도윤', '얘들아!! 2-3반에서 누가 사람을 물었어!'], ['하린', '뭐? 장난치지 마…'], ['도윤', '진짜야! 이상한 애가 이쪽으로 오고 있다고!']] },
+        { goal: 'goto', room: '보건실', text: '보건실로 피하자', zombies: 2 },
+        { say: [['하린', '도윤이 넘어지면서 다리를 다쳤어. 구급상자가 필요해.'], ['도윤', '과학실에 하나 있을 거야… 지난번에 봤어.'], ['하린', '소리 내지 말고 같이 가자.']] },
+        { goal: 'collect', item: 'kit', rooms: ['과학실'], text: '과학실에서 구급상자 찾기', zombies: 1 },
+        { say: [['도윤', '으악, 저기 또 온다!'], ['하린', '흩어지지 마! 도망 다니면서 버텨!']] },
+        { goal: 'survive', secs: 35, text: '버티기', zombies: 3 },
+        { say: [['서진', '거기 누구 있어? 나 방송부 서진이야!'], ['서진', '교무실로 와. 옥상 열쇠가 거기 있어.'], ['하린', '옥상…? 거기로 구조대가 온다는 거야?'], ['서진', '응. 방송실 무전으로 들었어. 빨리!']] },
+        { goal: 'goto', room: '교무실', text: '교무실로 가기', zombies: 2 },
+        { say: [['서진', '왔구나! 근데… 열쇠가 없어.'], ['도윤', '뭐?!'], ['—', '— EP.1 끝 · 다음 이야기: 세 조각의 열쇠 —']] },
+      ] },
+      { title: '세 조각의 열쇠', sub: '교감 선생님의 비밀', steps: [
+        { say: [['서진', '교감 선생님이 열쇠를 세 조각으로 나눠서 숨기셨대. 땡땡이 방지라나.'], ['하린', '하필 지금…'], ['서진', '과학실, 음악실, 도서관. 같이 움직이자.']] },
+        { goal: 'collect', item: 'key', rooms: ['과학실', '음악실', '도서관'], text: '열쇠 조각 모으기', zombies: 5 },
+        { say: [['도윤', '다 모았다! 이제…'], ['???', '그르르… 야자… 시간에… 어딜… 가나…'], ['하린', '교, 교감 선생님…?!'], ['서진', '완전히 감염됐어. 피해!']] },
+        { goal: 'survive', secs: 40, boss: true, text: '교감 선생님을 피해 버티기', zombies: 1 },
+        { say: [['서진', '따돌렸다… 이제 옥상 문만 열면 돼.'], ['하린', '잠깐, 아직 숨어 있는 친구들이 있어!'], ['—', '— EP.2 끝 · 다음 이야기: 옥상으로 —']] },
+      ] },
+      { title: '옥상으로', sub: '모두 함께 탈출', steps: [
+        { say: [['하린', '지우랑 유나가 2-1반이랑 음악실에 숨어 있대.'], ['도윤', '데리러 가자. 우리끼리만 갈 순 없어.']] },
+        { goal: 'rescue', who: [['지우', '2-1반', 'photo'], ['유나', '음악실', 'runner']], boss: true, text: '숨은 친구 구하기', zombies: 4 },
+        { say: [['지우', '고마워… 정말 무서웠어.'], ['방송', '📢 구조 헬기 도착. 옥상의 학생들은… 지지직'], ['서진', '지금이야! 복도 끝 계단으로!']] },
+        { goal: 'escape', text: '복도 끝 옥상 계단으로 탈출', zombies: 4 },
+        { say: [['나', '…살았다.'], ['하린', '다들… 무사해서 다행이야.'], ['도윤', '다음 야자는 절대 안 해.'], ['서진', '그건 선생님한테 말해.'], ['—', '— 1부 완 · 함께해 줘서 고마워요! —']] },
+      ] },
+    ];
     // The floor: walls everywhere, then rooms, the corridor, doors and furniture carved in.
     const WALL = 1, FLOOR = 0, HALL = 2, DESK = 3, BED = 4, SHELF = 5, STAIR = 6, DOOR = 7;
     const grid = new Uint8Array(COLS * ROWS).fill(WALL);
@@ -2543,7 +2567,7 @@
     for (const [x, y] of [[10, 4], [10, 5], [30, 4], [30, 5], [20, 18], [20, 19], [30, 19], [30, 20]]) set(x, y, DOOR);
     const solid = v => v === WALL || v === DESK || v === BED || v === SHELF;
     const game = { phase: 'lobby', cls, CLASSES, ZSKILL, COLS, ROWS, grid, ROOMS, WALL, FLOOR, HALL, DESK, BED, SHELF, STAIR, DOOR, at, length, FINALE,
-      ents: [], items: [], bars: [], speaker: null, events: [], time: 0, phaseT: 0, left: length, ended: false, won: false, why: '', over: 0,
+      STORY, story: null, ep: -1, si: -1, goal: null, lines: null, li: 0, ents: [], items: [], bars: [], speaker: null, events: [], time: 0, phaseT: 0, left: length, ended: false, won: false, why: '', over: 0,
       infected: 0, escaped: 0, saved: 0, skillsUsed: 0, score: 0, player: null, dx: 0, dy: 0, open: false, nextItem: 6, hostsAt: -1 };
     const emit = (t, x, y, v, extra) => { if (game.events.length < 200) game.events.push({ t, x, y, v, ...extra }); };
     const barAt = (x, y) => game.bars.some(b => b.x === x && b.y === y);
@@ -2653,7 +2677,7 @@
       return true;
     };
     game.skill = () => skill(game.player);
-    const ITEMS = { choco: ['🍫', '초코바'], ext: ['🧯', '소화기'], shot: ['💉', '백신'] };
+    const ITEMS = { choco: ['🍫', '초코바'], ext: ['🧯', '소화기'], shot: ['💉', '백신'], kit: ['🧰', '구급상자'], key: ['🗝️', '열쇠 조각'] };
     game.ITEMS = ITEMS;
     const useItem = e => {
       if (!e.item || e.gone || e.turning || e.zombie) return false;
@@ -2666,7 +2690,7 @@
     };
     game.useItem = () => useItem(game.player);
     const turn = (h, by) => { h.turning = TURN; h.by = by; emit('infect', h.x, h.y, 0, { who: h.id, name: h.name, by: by && by.name }); };
-    let zf = null, hf = null, sf = null, ff = 0;
+    let zf = null, hf = null, sf = null, pf = null, ff = 0;
     const think = (e, dt) => {
       if (e.stun > 0 || e.turning > 0) return;
       const sp = speedOf(e);
@@ -2677,6 +2701,12 @@
         if (game.speaker && Math.hypot(game.speaker.x - e.x, game.speaker.y - e.y) < 10) { const s = stepOn(game.speaker.field, e); if (s) return toward(e, s[0], s[1], sp, dt); }
         const d = hf ? dist(hf, e.x, e.y) : -1;
         if (d >= 0 && d <= (e.host ? sense : sense * 0.6)) { const s = stepOn(hf, e); if (s) { if (e.bot && e.cd <= 0 && d <= 3 && random() < 0.02) skill(e); return toward(e, s[0], s[1], sp, dt); } }
+      } else if (e.lost) { return;
+      } else if (e.ally) {
+        // A friend keeps a step or two behind the player.
+        const pd = pf ? dist(pf, e.x, e.y) : -1;
+        if (pd > 1 || Math.hypot(game.player.x - e.x, game.player.y - e.y) > 1.6) { const s = pf && stepOn(pf, e); if (s) toward(e, s[0], s[1], sp * (pd > 4 ? 1.15 : 1), dt); }
+        return;
       } else if (e.bot) {
         const zd = zf ? dist(zf, e.x, e.y) : -1;
         if (zd >= 0 && zd <= 9) {
@@ -2709,12 +2739,13 @@
     const tick = dt => {
       game.phaseT += dt;
       if (game.phase === 'intro') { if (game.phaseT >= INTRO) game.skip(); return; }
+      if (game.phase === 'scene') return;
       const p = game.player;
       // The player's own steering (classmates think for themselves).
       if (!p.gone) { const sp = speedOf(p); slide(p, game.dx * sp, game.dy * sp, dt); }
       for (const e of game.ents) {
         if (e.gone) continue;
-        for (const k of ['stun', 'imm', 'fast', 'slow', 'cd', 'caught']) e[k] = Math.max(0, e[k] - dt);
+        for (const k of ['stun', 'imm', 'fast', 'slow', 'cd', 'caught']) e[k] = Math.max(0, e[k] - dt * (k === 'stun' && e.boss ? 2 : 1));
         if (e.turning > 0 && (e.turning -= dt) <= 0) {
           e.turning = 0; e.zombie = true; e.turnedAt = game.time; e.goal = null; e.item = null; e.cd = 3; game.infected++;
           emit('turn', e.x, e.y, 0, { who: e.id, name: e.name });
@@ -2738,6 +2769,7 @@
         ff = 0.2;
         zf = field(game.zombies().map(z => [Math.floor(z.x), Math.floor(z.y)])); sf = safety(zf);
         hf = field(game.humans().filter(h => !h.imm).map(h => [Math.floor(h.x), Math.floor(h.y)]));
+        if (game.story) pf = field([[Math.floor(p.x), Math.floor(p.y)]]);
       }
       for (const e of game.ents) if (e.bot && !e.gone) think(e, dt);
       // Barricades wear down, faster with zombies at them; the speaker goes quiet.
@@ -2747,12 +2779,27 @@
       // Touch: a zombie turns a student after a moment.
       for (const z of game.zombies()) {
         if (z.stun > 0 || z.caught > 0) continue;
-        for (const h of game.humans()) if (!h.imm && Math.hypot(h.x - z.x, h.y - z.y) < R * 2 + 0.05) { turn(h, z); z.caught = 0.8; break; }
+        for (const h of game.humans()) if (!h.imm && Math.hypot(h.x - z.x, h.y - z.y) < R * 2 + 0.05) {
+          // In the story a caught player stops the scene (and may retry) instead of turning.
+          if (game.story && h === p) { emit('caught', h.x, h.y, 0); return end(false, 'caught'); }
+          turn(h, z); z.caught = 0.8; break;
+        }
       }
       // Floor items now and then; anyone walking over one with a free hand takes it.
       if (game.time >= game.nextItem) { game.nextItem = game.time + 14; if (game.items.length < itemMax) { const p2 = spot(), k = ['choco', 'ext', 'shot'][Math.floor(random() * 3)]; game.items.push({ x: p2.x, y: p2.y, kind: k }); } }
-      for (const e of game.humans()) { if (e.item) continue; const it = game.items.find(i => Math.hypot(i.x - e.x, i.y - e.y) < 0.6); if (it) { e.item = it.kind; game.items.splice(game.items.indexOf(it), 1); emit('item', e.x, e.y, 0, { who: e.id, item: it.kind }); } }
+      for (const it of game.items.slice()) if (it.story && Math.hypot(it.x - p.x, it.y - p.y) < 0.7) { game.items.splice(game.items.indexOf(it), 1); if (game.goal) game.goal.n++; emit('got', it.x, it.y, 0, { item: it.kind, n: game.goal && game.goal.n, of: game.goal && game.goal.of }); }
+      for (const e of game.humans()) { if (e.item || e.lost || e.ally) continue; const it = game.items.find(i => !i.story && Math.hypot(i.x - e.x, i.y - e.y) < 0.6); if (it) { e.item = it.kind; game.items.splice(game.items.indexOf(it), 1); emit('item', e.x, e.y, 0, { who: e.id, item: it.kind }); } }
       // The finale: the rooftop door opens; students on the stairs get out.
+      if (game.story) {
+        const gl = game.goal; let done = false;
+        if (gl.goal === 'goto') { const r = ROOMS.find(r2 => r2.name === gl.room); done = p.x >= r.x0 && p.x < r.x1 + 1 && p.y >= r.y0 && p.y < r.y1 + 1; }
+        else if (gl.goal === 'collect') done = gl.n >= gl.of;
+        else if (gl.goal === 'survive') done = (gl.t -= dt) <= 0;
+        else if (gl.goal === 'rescue') { for (const k of game.ents) if (k.lost && !k.gone && Math.hypot(k.x - p.x, k.y - p.y) < 1.1) { k.lost = false; k.ally = true; gl.n++; emit('rescued', k.x, k.y, 0, { name: k.name }); } done = gl.n >= gl.of; }
+        else if (gl.goal === 'escape') done = at(Math.floor(p.x), Math.floor(p.y)) === STAIR;
+        if (done) { emit('done', p.x, p.y, 0, { text: gl.text }); game.next(); }
+        return;
+      }
       if (!game.open && game.left <= FINALE) { game.open = true; emit('open', 42.5, 11.5, 0); }
       if (game.open) for (const h of game.humans()) if (at(Math.floor(h.x), Math.floor(h.y)) === STAIR) { h.gone = true; game.escaped++; emit('escape', h.x, h.y, 0, { who: h.id, name: h.name }); }
       const alive = game.humans().length + game.ents.filter(e => e.turning > 0).length;
@@ -2765,6 +2812,7 @@
       game.ended = true; game.won = won; game.why = why; game.phase = 'over'; game.phaseT = 0;
       const p = game.player;
       game.saved = game.escaped + game.humans().length;
+      if (game.story) { game.score = won ? 500 + game.ep * 250 : 0; game.xp = won ? 120 + game.ep * 60 : 10; emit(won ? 'win' : 'lose', p.x, p.y, 0); return; }
       game.score = Math.round(p.zombie ? (p.turnedAt != null ? p.turnedAt : game.time) * 5 + game.ents.filter(e => e.by === p).length * 150 + (won ? 300 : 0)
         : game.time * 10 + (why === 'escape' ? 500 : 0) + (won ? 300 : 0) + game.skillsUsed * 20);
       game.xp = Math.max(10, Math.round(game.score / 8));
@@ -2775,6 +2823,41 @@
       if (game.ended) { game.over += Math.max(0, Math.min(250, ms)) / 1000; return; }
       let left = Math.max(0, Math.min(250, ms)) / 1000;
       while (left > 0 && !game.ended) { const dt = Math.min(left, 1 / 60); left -= dt; tick(dt); }
+    };
+    // Story: the player and two friends who follow (zombies pass them by); the script's goals add zombies, items and
+    // hidden classmates; a caught player can retry from where they were.
+    const away = (min = 9) => spot((x, y) => Math.hypot(x + 0.5 - game.player.x, y + 0.5 - game.player.y) > min);
+    const spawnZombie = (name, boss) => { const p2 = away(), z = add(name, boss ? 99 : 1, 'runner', true); z.x = p2.x; z.y = p2.y; z.zombie = true; z.turnedAt = -99; z.cd = 3; if (boss) { z.boss = true; z.host = true; } return z; };
+    const inRoom = (name) => { const r = ROOMS.find(r2 => r2.name === name); return spot((x, y) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1); };
+    game.startStory = ep => {
+      if (game.phase !== 'lobby' || !STORY[ep]) return false;
+      const p = game.player;
+      game.story = STORY[ep]; game.ep = ep; game.si = -1; game.ents = [p]; p.id = 0; game.items.length = 0; game.nextItem = 20;
+      p.x = 4.5; p.y = 11.5; p.face = 0;
+      for (const [name, c, dx] of [['하린', 'nurse', -1], ['도윤', 'taekwon', -1.6]]) { const f = add(name, 20, c, true); f.x = p.x + dx; f.y = p.y + (dx < -1.2 ? 0.6 : -0.6); f.ally = true; f.imm = 1e9; }
+      if (ep > 0) { const f = add('서진', 31, 'radio', true); f.x = p.x - 2.2; f.y = p.y; f.ally = true; f.imm = 1e9; }
+      game.next(); return true;
+    };
+    game.next = () => {
+      const st2 = game.story.steps[++game.si];
+      if (!st2) return end(true, 'story');
+      if (st2.say) { game.phase = 'scene'; game.lines = st2.say; game.li = 0; emit('scene', 0, 0, 0); return; }
+      game.phase = 'play'; game.goal = { ...st2, n: 0, t: st2.secs || 0, of: st2.rooms ? st2.rooms.length : st2.who ? st2.who.length : 1 };
+      for (let k = 0; k < (st2.zombies || 0); k++) spawnZombie('좀비', false);
+      if (st2.boss && !game.ents.some(e => e.boss && !e.gone)) spawnZombie('교감 선생님', true);
+      if (st2.rooms) for (const r of st2.rooms) { const p2 = inRoom(r); game.items.push({ x: p2.x, y: p2.y, kind: st2.item, story: true }); }
+      if (st2.who) for (const [name, r, c] of st2.who) { const p2 = inRoom(r), k = add(name, 12, c, true); k.x = p2.x; k.y = p2.y; k.lost = true; k.imm = 1e9; }
+      if (st2.goal === 'escape') { game.open = true; emit('open', 42.5, 11.5, 0); }
+      emit('goal', 0, 0, 0, { text: st2.text });
+    };
+    game.advance = () => { if (game.phase !== 'scene') return false; if (++game.li >= game.lines.length) game.next(); return true; };
+    game.retry = () => {
+      if (!game.story || !game.ended || game.won) return false;
+      const p = game.player;
+      game.ended = false; game.over = 0; game.phase = 'play'; game.why = '';
+      p.turning = 0; p.zombie = false; p.stun = 0; p.imm = 3;
+      for (const z of game.zombies()) if (Math.hypot(z.x - p.x, z.y - p.y) < 8) { const p2 = away(); z.x = p2.x; z.y = p2.y; z.stun = 1; }
+      emit('retry', p.x, p.y, 0); return true;
     };
     game.take = () => game.events.splice(0);
     game.caughtBy = () => game.ents.filter(e => e.by === game.player).length;
@@ -3125,10 +3208,10 @@
   const YAJA_KEY = "gfx-games-yaja";
   const yajaNeed = lv => 60 + lv * 30;
   function yajaProfile() {
-    try { const p = JSON.parse(localStorage.getItem(YAJA_KEY) || "{}") || {}; return { lv: Math.max(1, p.lv | 0), xp: Math.max(0, p.xp | 0), cls: typeof p.cls === "string" ? p.cls : "runner" }; }
-    catch { return { lv: 1, xp: 0, cls: "runner" }; }
+    try { const p = JSON.parse(localStorage.getItem(YAJA_KEY) || "{}") || {}; return { lv: Math.max(1, p.lv | 0), xp: Math.max(0, p.xp | 0), cls: typeof p.cls === "string" ? p.cls : "runner", story: Math.max(0, p.story | 0) }; }
+    catch { return { lv: 1, xp: 0, cls: "runner", story: 0 }; }
   }
-  function saveYajaProfile(p) { try { localStorage.setItem(YAJA_KEY, JSON.stringify({ lv: p.lv, xp: p.xp, cls: p.cls })); } catch {} }
+  function saveYajaProfile(p) { try { localStorage.setItem(YAJA_KEY, JSON.stringify({ lv: p.lv, xp: p.xp, cls: p.cls, story: p.story | 0 })); } catch {} }
   const surviveCost = (base, lv) => Math.round(base * Math.pow(1 + lv, 1.6));
   function surviveMeta() {
     try { const m = JSON.parse(localStorage.getItem(SURVIVE_META_KEY) || "{}") || {}; return { stars: Math.max(0, m.stars | 0), reborn: Math.max(0, m.reborn | 0), perks: m.perks && typeof m.perks === "object" ? m.perks : {} }; }
@@ -5716,7 +5799,9 @@
           const near = (x, y, r = 9) => Math.hypot(x - game.player.x, y - game.player.y) < r;
           // Lobby layout: six club cards (3×2) and the start button.
           const CARD = i => ({ x: 214 + (i % 3) * 140, y: 58 + Math.floor(i / 3) * 98, w: 130, h: 88 });
-          const START = { x: 486, y: 302, w: 142, h: 46 };
+          const START = { x: 486, y: 302, w: 142, h: 46 }, STORYB = { x: 334, y: 302, w: 142, h: 46 }, BACK = { x: 214, y: 302, w: 120, h: 46 };
+          const EP = i => ({ x: 214 + i * 140, y: 92, w: 130, h: 196 });
+          let view = 'clubs', typedAt = 0;
           const inside = (q, r) => q.x >= r.x && q.x <= r.x + r.w && q.y >= r.y && q.y <= r.y + r.h;
           const choose = i => { pick = (i + CLS.length) % CLS.length; game.choose(CLS[pick]); prof.cls = CLS[pick]; saveYajaProfile(prof); sfx.play('tap'); };
           const go = () => { if (game.phase === 'lobby') { game.begin(); begin(); sfx.play('level'); } };
@@ -5726,12 +5811,25 @@
           };
           const move = q => { stick.x = q.x; stick.y = q.y; const dx = q.x - stick.ax, dy = q.y - stick.ay, m = Math.hypot(dx, dy), k = m < 7 ? 0 : Math.min(1, (m - 7) / 30) / m; game.aim(dx * k, dy * k); };
           const doSkill = () => { if (!game.skill() && game.player.cd > 0) sfx.play('nope'); focus(); };
+          // A line types out; a tap shows the rest of it, the next tap moves on.
+          const LINE_CPS = 30;
+          const talk = () => { const line = game.lines?.[game.li]; if (!line) return; if ((performance.now() - typedAt) / 1000 * LINE_CPS < line[1].length) { typedAt = -1e9; return; } game.advance(); typedAt = performance.now(); sfx.play('tap'); };
           const doItem = () => { if (!game.useItem()) sfx.play('nope'); focus(); };
           on(canvas, 'pointerdown', e => {
             e.preventDefault(); focus(); sfx.unlock();
             const q = toWorld(e);
-            if (game.phase === 'lobby') { const i = CLS.findIndex((_, k) => inside(q, CARD(k))); if (i >= 0) choose(i); else if (inside(q, START)) go(); return; }
+            if (game.phase === 'lobby') {
+              if (view === 'eps') {
+                const i = game.STORY.findIndex((_, k) => inside(q, EP(k)));
+                if (i >= 0 && i <= prof.story) { game.startStory(i); begin(); sfx.play('level'); view = 'clubs'; typedAt = performance.now(); }
+                else if (i >= 0) sfx.play('nope'); else if (inside(q, BACK)) { view = 'clubs'; sfx.play('tap'); }
+                return;
+              }
+              const i = CLS.findIndex((_, k) => inside(q, CARD(k))); if (i >= 0) choose(i); else if (inside(q, START)) go(); else if (inside(q, STORYB)) { view = 'eps'; sfx.play('tap'); }
+              return;
+            }
             if (game.phase === 'intro') { game.skip(); return; }
+            if (game.phase === 'scene') { talk(); return; }
             if (game.ended) return;
             if (Math.hypot(q.x - SKL.x, q.y - SKL.y) <= SKL.r + 8) return doSkill();
             if (Math.hypot(q.x - ITM.x, q.y - ITM.y) <= ITM.r + 8) return doItem();
@@ -5748,6 +5846,7 @@
               return;
             }
             if (game.phase === 'intro') { if (!repeat) game.skip(); return; }
+            if (game.phase === 'scene') { if (!repeat && (k === ' ' || k === 'enter')) talk(); return; }
             if (k === ' ' || k === 'enter') { if (!repeat) doSkill(); return; }
             if (!['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'].includes(k)) return;
             held.add(k); steer();
@@ -5780,11 +5879,19 @@
               else if (ev.t === 'you') say('감염되었습니다…', '#8BE36B', 3, '이제 좀비! 남은 학생을 모두 감염시키세요');
               else if (ev.t === 'open') { say('옥상 문이 열렸다!', '#8BE36B', 3, '복도 오른쪽 끝 계단으로 탈출하세요'); sfx.play('level'); }
               else if (ev.t === 'escape') { tell('🚁 ' + ev.name + ' 탈출'); if (seen) sfx.play('match'); }
+              else if (ev.t === 'scene') typedAt = performance.now();
+              else if (ev.t === 'goal') { say('🎯 ' + ev.text, '#FFD447', 2.4); sfx.play('match'); }
+              else if (ev.t === 'done') { sfx.play('clear', 2); flash = [0.35, '255,225,120']; }
+              else if (ev.t === 'got') { sfx.play('coin'); float(ev.x, ev.y, game.ITEMS[ev.item][0] + ' ' + ev.n + '/' + ev.of, '#FFD447'); ring(ev.x, ev.y, 1.2, '#FFD447', 0.5); }
+              else if (ev.t === 'rescued') { sfx.play('bonus'); float(ev.x, ev.y, ev.name + ' 합류!', '#8BE3F5'); tell('🤝 ' + ev.name + ' 합류'); }
+              else if (ev.t === 'caught') { sfx.play('hurt'); flash = [0.7, '229,72,77']; shake = 10; navigator.vibrate?.(90); }
+              else if (ev.t === 'retry') { say('다시!', '#ffffff', 1.2); ring(ev.x, ev.y, 3, '#8BE3F5', 0.6); }
               else if (ev.t === 'win') sfx.play('win');
               else if (ev.t === 'lose') sfx.play('lose');
             }
             // The music follows the phase; it fades by itself once the round is over.
-            if (!game.ended) sfx.music(game.phase === 'lobby' ? 'lobby' : game.phase === 'intro' || game.phase === 'count' ? 'count' : p.zombie ? 'zombie' : game.open ? 'finale' : 'play');
+            if (!game.ended) sfx.music(game.phase === 'lobby' ? 'lobby' : game.phase === 'scene' ? (game.si === 0 ? 'lobby' : 'count') : game.phase === 'intro' || game.phase === 'count' ? 'count'
+              : p.zombie ? 'zombie' : game.open || game.ents.some(e => e.boss && !e.gone) ? 'finale' : 'play');
             if (game.ended && !endSeen) { endSeen = true; finish(false, game.score); }
           };
           sign = () => [game.phase, game.humans().length, game.zombies().length, game.ended && game.over > 1].join('/');
@@ -5818,28 +5925,37 @@
             const sx = e.x * T - camX, sy = e.y * T - camY, bob = Math.sin(e.walk * 5) * 1.6, shakeX = e.turning > 0 ? (Math.random() - 0.5) * 3 : 0;
             const z = e.zombie || (e.turning > 0 && Math.floor(game.phaseT * 12) % 2);
             ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(sx, sy + 2, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
-            const x = sx + shakeX, y = sy + bob * 0.3;
+            const x = sx + shakeX, y = sy + bob * 0.3, back = Math.sin(e.face) < -0.55 && !e.lost;
+            if (e.boss) { ctx.save(); ctx.translate(x, y); ctx.scale(1.35, 1.35); ctx.translate(-x, -y); }
             if (e.imm > 0) { ctx.beginPath(); ctx.arc(x, y - 14, 19, 0, Math.PI * 2); ctx.fillStyle = 'rgba(139,227,245,.22)'; ctx.fill(); ctx.strokeStyle = 'rgba(139,227,245,.8)'; ctx.lineWidth = 1.5; ctx.stroke(); }
             if (e.host) { ctx.beginPath(); ctx.arc(x, y - 12, 17, 0, Math.PI * 2); ctx.fillStyle = 'rgba(229,72,77,.22)'; ctx.fill(); }
             // legs, body, arms, head
             const leg = Math.sin(e.walk * 9) * 3;
             fill(x - 5, y - 6, 3, 6 + leg * 0.4, '#23243A'); fill(x + 2, y - 6, 3, 6 - leg * 0.4, '#23243A');
             ctx.beginPath(); ctx.roundRect(x - 7, y - 18, 14, 13, 4); ctx.fillStyle = z ? '#5E6B4E' : '#2E3A6B'; ctx.fill();
-            if (!z) { fill(x - 1.5, y - 17, 3, 8, CLUB[e.cls] || '#ffffff'); }
+            if (!z && !back) { fill(x - 1.5, y - 17, 3, 8, CLUB[e.cls] || '#ffffff'); }
+            if (back && !z) { ctx.beginPath(); ctx.roundRect(x - 6, y - 17, 12, 10, 3); ctx.fillStyle = CLUB[e.cls] || '#ffffff'; ctx.fill(); fill(x - 6, y - 14, 12, 1.5, 'rgba(0,0,0,.25)'); }
+            if (e.boss) { fill(x - 1.5, y - 17, 3, 9, '#7A1E24'); }
             else { const fx = Math.cos(e.face) * 9, fy = Math.sin(e.face) * 4; ctx.strokeStyle = '#8DBF6A'; ctx.lineWidth = 3.2; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x - 5, y - 14); ctx.lineTo(x - 5 + fx, y - 14 + fy); ctx.moveTo(x + 5, y - 14); ctx.lineTo(x + 5 + fx, y - 14 + fy); ctx.stroke(); ctx.lineCap = 'butt'; }
             const hy = y - 25;
             disc(x, hy, 9, z ? '#9CCB78' : '#F6D7B8');
             ctx.beginPath(); ctx.arc(x, hy - 1, 9.5, Math.PI * 1.05, Math.PI * 1.95); ctx.lineWidth = 5; ctx.strokeStyle = z ? '#3F4A33' : HAIR[e.hair]; ctx.stroke();
             const look = Math.cos(e.face) * 2;
-            disc(x - 3 + look, hy + 1, 1.7, z ? '#E5484D' : '#2B1E16'); disc(x + 3 + look, hy + 1, 1.7, z ? '#E5484D' : '#2B1E16');
-            if (z) fill(x - 3, hy + 5, 6, 1.5, '#4A2020');
+            if (back) { disc(x, hy - 0.5, 9.3, z ? '#3F4A33' : (e.boss ? '#9A9A9A' : HAIR[e.hair])); if (z) { disc(x - 3, hy + 3, 2.5, '#9CCB78'); disc(x + 4, hy - 2, 2, '#9CCB78'); } }
+            else {
+              disc(x - 3 + look, hy + 1, 1.7, z ? '#E5484D' : '#2B1E16'); disc(x + 3 + look, hy + 1, 1.7, z ? '#E5484D' : '#2B1E16');
+              if (z) fill(x - 3, hy + 5, 6, 1.5, '#4A2020');
+              if (e.boss) { ctx.strokeStyle = '#2B1E16'; ctx.lineWidth = 1.2; ctx.strokeRect(x - 6 + look, hy - 1, 5, 4); ctx.strokeRect(x + 1 + look, hy - 1, 5, 4); }
+            }
             if (e.stun > 0) for (let k = 0; k < 3; k++) { const a = game.phaseT * 6 + k * 2.1; label('✦', x + Math.cos(a) * 11, hy - 11 + Math.sin(a) * 3, 9, '#FFE27A'); }
             if (e.fast > 0) { ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1.5; for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(x - Math.cos(e.face) * 12, y - 18 + k * 6); ctx.lineTo(x - Math.cos(e.face) * 22, y - 18 + k * 6); ctx.stroke(); } }
             // The name tag: level and name, gold for the player, red for the hosts.
-            const tag = (e === game.player ? '나' : 'Lv.' + e.lv + ' ' + e.name);
+            const tag = e === game.player ? '나' : e.boss ? '교감 선생님' : e.ally || e.lost || game.story ? e.name : 'Lv.' + e.lv + ' ' + e.name;
             ctx.font = font(10); const tw = ctx.measureText(tag).width + 10;
             ctx.beginPath(); ctx.roundRect(x - tw / 2, hy - 24, tw, 13, 6); ctx.fillStyle = 'rgba(10,12,28,.62)'; ctx.fill();
             label(tag, x, hy - 17.5, 10, e === game.player ? '#FFD447' : e.host ? '#FF8A8E' : e.zombie ? '#B6E39A' : '#ffffff');
+            if (e.boss) ctx.restore();
+            if (e.lost) { const a = Math.abs(Math.sin(game.phaseT * 4)) * 3; pill(x - 22, hy - 44 - a, 44, 16, 'rgba(255,255,255,.92)'); label('살려줘!', x, hy - 36 - a, 10, '#E5484D'); }
             if (e === game.player && !game.ended) { const a = 2 + Math.sin(game.phaseT * 5) * 2; ctx.beginPath(); ctx.moveTo(x - 5, hy - 32 - a); ctx.lineTo(x + 5, hy - 32 - a); ctx.lineTo(x, hy - 26 - a); ctx.closePath(); ctx.fillStyle = '#FFD447'; ctx.fill(); }
           };
           const outlined = (text, x, y, size, color, w = 0.22) => { ctx.font = font(size); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2.5, size * w); ctx.strokeStyle = '#0B0D1C'; ctx.strokeText(text, x, y); ctx.fillStyle = color; ctx.fillText(text, x, y); };
@@ -5853,7 +5969,7 @@
             for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (game.at(x, y) !== game.WALL) floorTile(x, y, x * T - camX, y * T - camY);
             // Room names on the floor.
             ctx.globalAlpha = 0.35; for (const r of game.ROOMS) label(r.name, (r.x0 + 1) * T - camX, (r.top ? r.y0 + 0.6 : r.y1 + 0.4) * T - camY, 15, '#2A1E14', 'left'); ctx.globalAlpha = 1;
-            for (const it of game.items) { const sx = it.x * T - camX, sy = it.y * T - camY + Math.sin(game.phaseT * 4 + it.x) * 2; disc(sx, sy, 12, 'rgba(255,240,170,.35)'); label(game.ITEMS[it.kind][0], sx, sy, 17, '#fff'); }
+            for (const it of game.items) { const sx = it.x * T - camX, sy = it.y * T - camY + Math.sin(game.phaseT * 4 + it.x) * 2; disc(sx, sy, it.story ? 16 + Math.sin(game.phaseT * 6) * 3 : 12, it.story ? 'rgba(255,212,71,.45)' : 'rgba(255,240,170,.35)'); label(game.ITEMS[it.kind][0], sx, sy, 17, '#fff'); }
             if (game.speaker) { const sx = game.speaker.x * T - camX, sy = game.speaker.y * T - camY; for (let k = 0; k < 3; k++) { const ph = (game.phaseT * 1.5 + k / 3) % 1; ctx.beginPath(); ctx.arc(sx, sy, 10 + ph * 60, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(178,139,240,' + (1 - ph) * 0.7 + ')'; ctx.lineWidth = 2; ctx.stroke(); } label('📢', sx, sy, 20, '#fff'); }
             // Rows back to front: furniture, walls and people standing in that row.
             const people = game.ents.filter(e => !e.gone).sort((a, b) => a.y - b.y);
@@ -5879,15 +5995,28 @@
             pill(8, 8, 118, 26); label('🧑 ' + hs + '   🧟 ' + zs, 67, 21.5, 14, '#ffffff');
             feed.forEach((f, i) => { ctx.globalAlpha = Math.min(1, f.t); label(f.text, 12, 46 + i * 16, 11, '#E8E9F5', 'left'); });
             ctx.globalAlpha = 1;
+            if (game.story) {
+              const gl = game.goal, text = gl ? '🎯 ' + gl.text + (gl.goal === 'survive' ? ' ' + Math.ceil(Math.max(0, gl.t)) + '초' : gl.of > 1 || gl.goal === 'collect' || gl.goal === 'rescue' ? ' ' + gl.n + '/' + gl.of : '') : '';
+              ctx.font = font(14); const tw = Math.min(W - 280, ctx.measureText(text).width + 28);
+              if (text) { pill(W / 2 - tw / 2, 8, tw, 28, 'rgba(10,12,28,.75)'); label(text, W / 2, 22.5, 14, '#FFD447'); }
+              label('EP.' + (game.ep + 1) + ' ' + game.story.title, W / 2, 46, 11, 'rgba(232,233,245,.7)');
+            } else {
             const left = game.phase === 'count' ? Math.ceil(8 - game.phaseT) : Math.ceil(game.left);
             pill(W / 2 - 60, 8, 120, 28, game.phase === 'play' && game.left < 30 ? 'rgba(160,30,40,.8)' : 'rgba(10,12,28,.7)');
             label(game.phase === 'count' ? '숙주 선정 ' + left : '⏱ ' + clock(left * 1000), W / 2, 22.5, 15, '#ffffff');
-            if (game.open && !game.ended) { pill(W / 2 - 74, 40, 148, 20, 'rgba(40,120,60,.8)'); label('🚪 옥상 문 열림 →', W / 2, 50.5, 11, '#ffffff'); }
+            }
+            if (game.open && !game.ended && !game.story) { pill(W / 2 - 74, 40, 148, 20, 'rgba(40,120,60,.8)'); label('🚪 옥상 문 열림 →', W / 2, 50.5, 11, '#ffffff'); }
             // The minimap: walls, the stairs, students (blue), zombies near the player (red), the player (gold).
             const S = 2.5, mx = W - game.COLS * S - 8, my = 8;
             fill(mx - 2, my - 2, game.COLS * S + 4, game.ROWS * S + 4, 'rgba(10,12,28,.75)');
             for (let y = 0; y < game.ROWS; y++) for (let x = 0; x < game.COLS; x++) { const v = game.at(x, y); if (v !== game.WALL) fill(mx + x * S, my + y * S, S, S, v === game.STAIR && game.open ? '#8BE36B' : 'rgba(200,200,220,.28)'); }
             for (const e of game.ents) if (!e.gone && e !== p && (!e.zombie || near(e.x, e.y, 8))) fill(mx + e.x * S - 1.5, my + e.y * S - 1.5, 3, 3, e.zombie ? '#E5484D' : '#5AA9F0');
+            if (game.story && game.goal) {
+              const gl = game.goal, blink = Math.floor(performance.now() / 300) % 2;
+              if (gl.goal === 'goto') { const r = game.ROOMS.find(r2 => r2.name === gl.room); ctx.strokeStyle = blink ? '#FFD447' : 'rgba(255,212,71,.4)'; ctx.lineWidth = 1.5; ctx.strokeRect(mx + r.x0 * S, my + r.y0 * S, (r.x1 - r.x0 + 1) * S, (r.y1 - r.y0 + 1) * S); }
+              if (gl.goal === 'escape') fill(mx + 42 * S, my + 11 * S, S, S * 2, blink ? '#8BE36B' : '#FFD447');
+              if (blink) { for (const it of game.items) if (it.story) fill(mx + it.x * S - 2, my + it.y * S - 2, 4, 4, '#FFD447'); for (const k of game.ents) if (k.lost) fill(mx + k.x * S - 2, my + k.y * S - 2, 4, 4, '#8BE3F5'); }
+            }
             fill(mx + p.x * S - 2, my + p.y * S - 2, 4, 4, '#FFD447');
             // Joystick, skill (with its cooldown sweep) and item.
             ctx.beginPath(); ctx.arc(JOY.x, JOY.y, JOY.r, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.stroke();
@@ -5924,14 +6053,61 @@
             ctx.beginPath(); ctx.roundRect(214, 256, 410, 38, 10); ctx.fillStyle = 'rgba(8,10,26,.72)'; ctx.fill();
             label(c[0] + ' ' + c[2] + ' — ' + c[3], 419, 275, 12, '#ffffff');
             const need = yajaNeed(prof.lv);
-            label('Lv.' + prof.lv + '  EXP ' + prof.xp + '/' + need, 216, 316, 12, '#E8E9F5', 'left');
-            fill(216, 326, 250, 7, 'rgba(255,255,255,.18)'); fill(216, 326, 250 * Math.min(1, prof.xp / need), 7, '#FFD447');
-            label('난이도: ' + (g.levels.find(l => l[0] === st.level) || [0, ''])[1] + ' · 좌우 키·탭으로 선택', 216, 344, 10, 'rgba(232,233,245,.7)', 'left');
-            const pulse = 1 + Math.sin(performance.now() / 260) * 0.03;
-            ctx.save(); ctx.translate(START.x + START.w / 2, START.y + START.h / 2); ctx.scale(pulse, pulse);
-            ctx.beginPath(); ctx.roundRect(-START.w / 2, -START.h / 2 + 4, START.w, START.h, 14); ctx.fillStyle = '#7A2A10'; ctx.fill();
-            ctx.beginPath(); ctx.roundRect(-START.w / 2, -START.h / 2, START.w, START.h, 14); ctx.fillStyle = '#F0763A'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#FFE0C2'; ctx.stroke();
-            label('▶ 수업 시작', 0, 1, 18, '#ffffff'); ctx.restore();
+            label('Lv.' + prof.lv + ' · EXP ' + prof.xp + '/' + need, 216, 312, 11, '#E8E9F5', 'left');
+            fill(216, 322, 108, 6, 'rgba(255,255,255,.18)'); fill(216, 322, 108 * Math.min(1, prof.xp / need), 6, '#FFD447');
+            label('난이도 ' + (g.levels.find(l => l[0] === st.level) || [0, ''])[1], 216, 340, 10, 'rgba(232,233,245,.7)', 'left');
+            bigButton(STORYB, '📖 스토리', '#5A6BD8', '#26306E');
+            if (view === 'eps') {
+              fill(206, 52, 428, 244, 'rgba(8,10,26,.92)'); label('📖 스토리 1부 · 야자 시간의 비밀', 420, 72, 15, '#FFD447');
+              game.STORY.forEach((ep, i) => {
+                const r = EP(i), open = i <= prof.story, done = i < prof.story;
+                ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 12); ctx.fillStyle = open ? '#F4F1EA' : '#4A4E70'; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = open ? '#F0763A' : '#2A2F55'; ctx.stroke();
+                label('EP.' + (i + 1), r.x + r.w / 2, r.y + 22, 13, open ? '#F0763A' : '#9AA0C8');
+                label(open ? ['🏫', '🗝️', '🚁'][i] : '🔒', r.x + r.w / 2, r.y + 70, 40, '#000');
+                label(ep.title, r.x + r.w / 2, r.y + 118, 14, open ? '#2A2F55' : '#C2C6E4'); label(ep.sub, r.x + r.w / 2, r.y + 140, 10, open ? 'rgba(42,47,85,.7)' : '#9AA0C8');
+                label(done ? '✔ 클리어' : open ? '▶ 시작' : '이전 화를 깨면 열려요', r.x + r.w / 2, r.y + 174, done || open ? 13 : 9, done ? '#3FA57A' : open ? '#F0763A' : '#9AA0C8');
+              });
+              bigButton(BACK, '← 돌아가기', '#6B6F8E', '#2E3150');
+              return;
+            }
+            bigButton(START, '▶ 수업 시작', '#F0763A', '#7A2A10', true);
+          };
+          const bigButton = (B, text, color, dark, beat) => {
+            const pulse = beat ? 1 + Math.sin(performance.now() / 260) * 0.03 : 1;
+            ctx.save(); ctx.translate(B.x + B.w / 2, B.y + B.h / 2); ctx.scale(pulse, pulse);
+            ctx.beginPath(); ctx.roundRect(-B.w / 2, -B.h / 2 + 4, B.w, B.h, 14); ctx.fillStyle = dark; ctx.fill();
+            ctx.beginPath(); ctx.roundRect(-B.w / 2, -B.h / 2, B.w, B.h, 14); ctx.fillStyle = color; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.stroke();
+            label(text, 0, 1, B.w < 130 ? 15 : 17, '#ffffff'); ctx.restore();
+          };
+          const FACE = { '나': [0, '#FFD447'], '하린': [1, '#F58CC0'], '도윤': [0, '#F2F2F2'], '서진': [3, '#A47CF0'], '지우': [4, '#FFD447'], '유나': [2, '#FF9A3D'] };
+          const portrait = (who, cx, cy, size) => {
+            const zombieFace = who === '???';
+            ctx.save(); ctx.translate(cx, cy); ctx.scale(size, size);
+            ctx.beginPath(); ctx.roundRect(-16, 6, 32, 24, 8); ctx.fillStyle = zombieFace ? '#5E6B4E' : '#2E3A6B'; ctx.fill();
+            const f = FACE[who] || [0, '#ffffff']; if (!zombieFace) fill(-2, 7, 4, 14, f[1]);
+            disc(0, -8, 17, zombieFace ? '#9CCB78' : '#F6D7B8');
+            ctx.beginPath(); ctx.arc(0, -10, 18, Math.PI * 1.02, Math.PI * 1.98); ctx.lineWidth = 9; ctx.strokeStyle = zombieFace ? '#9A9A9A' : HAIR[f[0]]; ctx.stroke();
+            disc(-6, -6, 2.6, zombieFace ? '#E5484D' : '#2B1E16'); disc(6, -6, 2.6, zombieFace ? '#E5484D' : '#2B1E16');
+            if (zombieFace) { ctx.strokeStyle = '#2B1E16'; ctx.lineWidth = 1.5; ctx.strokeRect(-11, -9, 9, 7); ctx.strokeRect(2, -9, 9, 7); fill(-5, 2, 10, 2, '#4A2020'); }
+            else { ctx.beginPath(); ctx.arc(0, 0, 4, 0.2, Math.PI - 0.2); ctx.lineWidth = 1.5; ctx.strokeStyle = '#8A4A3A'; ctx.stroke(); disc(-10, 0, 2.5, 'rgba(245,140,160,.45)'); disc(10, 0, 2.5, 'rgba(245,140,160,.45)'); }
+            ctx.restore();
+          };
+          const scene = () => {
+            const line = game.lines?.[game.li]; if (!line) return;
+            const [who, text] = line, narr = who === '—', radio = who === '방송';
+            fill(0, 0, W, H, 'rgba(6,7,20,.55)');
+            if (game.si === 0 && game.li === 0) { fill(0, 70, W, 56, 'rgba(6,7,20,.7)'); outlined('EP.' + (game.ep + 1) + ' ' + game.story.title, W / 2, 98, 28, '#FFD447'); }
+            const n = Math.min(text.length, Math.floor((performance.now() - typedAt) / 1000 * LINE_CPS));
+            ctx.beginPath(); ctx.roundRect(16, H - 112, W - 32, 98, 14); ctx.fillStyle = 'rgba(12,14,32,.92)'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = narr ? '#FFD447' : '#F0763A'; ctx.stroke();
+            if (narr) label(text.slice(0, n), W / 2, H - 63, 16, '#FFD447');
+            else {
+              if (radio) label('📢', 66, H - 63, 40, '#fff'); else portrait(who, 66, H - 66, 1.25);
+              pill(112, H - 128, 22 + who.length * 15, 26, who === '???' ? 'rgba(160,30,40,.95)' : 'rgba(240,118,58,.95)'); label(who === '방송' ? '교내 방송' : who, 123, H - 115, 14, '#ffffff', 'left');
+              const lines2 = []; let cur = ''; ctx.font = font(15);
+              for (const ch of text.slice(0, n)) { if (ctx.measureText(cur + ch).width > W - 160) { lines2.push(cur); cur = ch; } else cur += ch; }
+              lines2.push(cur); lines2.slice(0, 3).forEach((l, i) => label(l, 118, H - 84 + i * 22, 15, '#ffffff', 'left'));
+            }
+            if (n >= text.length && Math.floor(performance.now() / 400) % 2) label('▼', W - 34, H - 26, 12, '#FFD447');
           };
           const LINES = [[0.3, '밤 9시 50분. 야간 자율 학습 시간.'], [2.1, '복도 형광등이 깜빡이기 시작했다.'], [3.9, '📢 “아, 아. 학생 여러분, 지금 즉시 교실 문을… 지지직—”'], [6.2, '어딘가에서 비명이 들렸다.'], [8, '숙주가 정해지기 전에, 흩어져라.']];
           let staticAt = -1;
@@ -5958,14 +6134,15 @@
             if (game.phase === 'intro') return intro();
             ctx.save(); if (shake > 0.3) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
             world(); ctx.restore();
+            if (game.phase === 'scene') return scene();
             if (flash[0] > 0) fill(0, 0, W, H, 'rgba(' + flash[1] + ',' + flash[0] * 0.6 + ')');
             if (game.phase === 'count') { const n = Math.ceil(8 - game.phaseT), k = (8 - game.phaseT) % 1; outlined(String(n), W / 2, H / 2 - 10, 60 + k * 24, '#FFD447'); }
             hud();
             if (game.ended) {
               // The round's XP, once, with level-ups.
-              if (awarded == null) { awarded = game.xp; prof.xp += awarded; let ups = 0; while (prof.xp >= yajaNeed(prof.lv)) { prof.xp -= yajaNeed(prof.lv); prof.lv++; ups++; } prof.ups = ups; saveYajaProfile(prof); st.yaja = { xp: awarded, ups, lv: prof.lv }; }
+              if (awarded == null) { awarded = game.xp; prof.xp += awarded; if (game.story && game.won) prof.story = Math.max(prof.story, game.ep + 1); let ups = 0; while (prof.xp >= yajaNeed(prof.lv)) { prof.xp -= yajaNeed(prof.lv); prof.lv++; ups++; } prof.ups = ups; saveYajaProfile(prof); st.yaja = { xp: awarded, ups, lv: prof.lv }; }
               ctx.globalAlpha = Math.min(1, game.over); fill(0, 0, W, H, 'rgba(6,7,20,.55)');
-              outlined(game.won ? (game.player.zombie ? '좀비 승리!' : game.why === 'escape' ? '옥상 탈출 성공!' : '살아남았다!') : (game.player.zombie ? '학생들이 버텼다…' : '전원 감염…'), W / 2, H / 2 - 20, 36, game.won ? '#FFD447' : '#E5484D');
+              outlined(game.story ? (game.won ? 'EP.' + (game.ep + 1) + ' 클리어!' : '잡혔다…') : game.won ? (game.player.zombie ? '좀비 승리!' : game.why === 'escape' ? '옥상 탈출 성공!' : '살아남았다!') : (game.player.zombie ? '학생들이 버텼다…' : '전원 감염…'), W / 2, H / 2 - 20, 36, game.won ? '#FFD447' : '#E5484D');
               ctx.globalAlpha = 1;
             }
           };
@@ -6511,6 +6688,11 @@
               : '왼쪽 조이스틱·WASD로 이동 · 오른쪽 큰 버튼·스페이스로 기술 · 작은 버튼·E로 아이템 · 끝까지 버티거나 마지막에 열리는 옥상 계단으로';
             if (game.ended && game.over > 1.2) {
               const y = st.yaja || { xp: game.xp, ups: 0, lv: 1 }, p = game.player;
+              if (game.story) {
+                if (game.won) showResult('EP.' + (game.ep + 1) + ' ' + game.story.title + ' 클리어!', 'EXP +' + y.xp + (y.ups ? ' · 레벨 업! Lv.' + y.lv : '') + (game.ep < game.STORY.length - 1 ? ' · 다음 화가 열렸어요' : ' · 1부 완결!'), null, '대기실로');
+                else showResult('잡혔다…', '좀비에게 붙잡혔어요. 같은 자리에서 다시 할 수 있어요', card => card.append(button('↻ 여기서 다시', () => { if (game.retry()) { endSeen = false; awarded = null; st.stopped = 0; result.hidden = true; delete result.dataset.headline; focus(); } }, 'gfx-game-again')), '대기실로');
+                return;
+              }
               const head = game.won ? (p.zombie ? '좀비 승리!' : game.why === 'escape' ? '옥상 탈출 성공!' : '살아남았다!') : (p.zombie ? '학생들이 버텼다…' : '전원 감염…');
               showResult(head, game.score.toLocaleString() + '점 · ' + (p.zombie ? '감염시킨 학생 ' + game.caughtBy() + '명' : '함께 살아남은 학생 ' + game.saved + '명') + ' · EXP +' + y.xp + (y.ups ? ' · 레벨 업! Lv.' + y.lv : ''), null, '다시 대기실로');
             }
@@ -6663,57 +6845,45 @@
   const WIDE = ["dino", "dash", "zombie", "school"];
   const page = new CSSStyleSheet();
   page.replaceSync(":host(:not([data-game-large])) { position:relative; inset:auto; width:100%; height:100%; } :host(:not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 150px); }"
-    + " .gfx-load-games { position:relative; } .gfx-shelf-toggle { display:none; }"
-    // Phones held upright: the game list folds into one bar — the game on screen, [게임 목록 ▾], 크게 보기 and the
-    // sound switch (게임 접기 would only leave an empty page here). [게임 목록] opens every game as a grid over the
-    // screen, so nothing has to be scrolled sideways. (The how-to line under the board comes from the games' own
-    // stylesheet.) The type is set in px: the column's 1.5vw comes out at 12px on a phone.
-    + "@media (max-width:640px) { .gfx-load-games { flex-direction:column; align-items:stretch; gap:6px; font-size:15px; }"
-    + " :host(:not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 200px); }"
-    + " .gfx-game-nav { flex:none; display:flex; flex-direction:row; flex-wrap:nowrap; align-items:center; overflow:visible; max-height:none; padding:5px; gap:6px; border-radius:18px; }"
-    + " :host(:not([data-shelf])) .gfx-game-tab:not([aria-pressed=\"true\"]) { display:none; }"
-    + " :host(:not([data-shelf])) .gfx-game-tab { flex:1; min-width:0; flex-direction:row; justify-content:flex-start; gap:.45em; padding:.3em .8em !important; }"
-    + " :host(:not([data-shelf])) .gfx-game-tab i { font-size:1.3em !important; } :host(:not([data-shelf])) .gfx-game-tab span { font-size:.95em; overflow:hidden; text-overflow:ellipsis; }"
-    + " .gfx-shelf-toggle { display:block; flex:none; white-space:nowrap; }"
-    + " .gfx-game-utils { flex:none; flex-direction:row; flex-wrap:nowrap; gap:5px; }"
-    + " .gfx-game-nav .gfx-game-util { flex:none; font-size:.78em !important; padding:.35em .6em !important; }"
-    + " .gfx-game-utils > :last-child { display:none; }"
-    + " :host([data-shelf]) .gfx-game-nav { position:absolute; left:0; right:0; top:0; z-index:6; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); align-items:stretch; gap:6px; padding:8px;"
-    + " max-height:calc(100cqh - 6px); overflow-y:auto; overscroll-behavior:contain; box-shadow:0 5px 0 var(--gfx-line, #6B4528), 0 14px 36px rgba(0,0,0,.3); }"
-    + " :host([data-shelf]) .gfx-game-tab { padding:.35em .1em !important; } :host([data-shelf]) .gfx-game-tab i { font-size:1.5em !important; } :host([data-shelf]) .gfx-game-tab span { font-size:.76em; }"
-    + " :host([data-shelf]) .gfx-shelf-toggle { grid-column:1 / 3; } :host([data-shelf]) .gfx-game-utils { grid-column:3 / -1; justify-content:flex-end; }"
-    + " .gfx-game-content { flex:1; min-height:0; padding:8px 8px 10px; border-radius:18px; }"
-    + " .gfx-game-head { margin-bottom:6px; gap:5px 8px; } .gfx-game-title { font-size:1em; } }"
-    // Phones on their side: the game takes the full height, the list stays a column on the right under the theme
-    // picker, which the page pins above it (46px). The tall boards (macaron drop, pinball) drop their 170px floor so
-    // they fit the height instead of scrolling.
-    + "@media (orientation:landscape) and (max-height:520px) { .gfx-load-games { gap:8px; font-size:14px; }"
-    + " :host(:not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 108px); }"
+    + " .gfx-load-games { position:relative; } .gfx-sheet, .gfx-menu-toggle { display:none; }"
+    // Phones fold everything but the game away. Closed, the screen holds the game and one slim row: ☰, the game's name
+    // and its scores (a narrow column on the left when the phone lies on its side). ☰ slides a menu sheet over the
+    // game with the game's difficulty and 새 판 and the settings; in it 게임 설명 and 게임 목록 fold open on their own.
+    // The pieces are moved there by the script below, so the games keep working on them as before.
+    + "@media (max-width:640px), (orientation:landscape) and (max-height:520px) { .gfx-load-games { flex-direction:column; align-items:stretch; gap:0; font-size:15px; }"
+    + " .gfx-load-games > .gfx-game-nav { display:none; }"
+    + " .gfx-game-content { flex:1; min-height:0; padding:4px 4px 6px; border-width:2px; border-radius:16px; }"
+    + " .gfx-game-head { margin-bottom:4px; flex-wrap:nowrap; gap:6px; } .gfx-game-head > .gfx-game-title { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:1em; }"
+    + " .gfx-game-head > .gfx-game-stats { margin-left:auto; flex:0 1 auto; } .gfx-game-board { padding:3px; }"
+    + " .gfx-menu-toggle { display:block; flex:none; order:0; font-size:.9em !important; padding:.15em .65em !important; line-height:1.2; }"
+    + " :host(:not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 50px); }"
+    + " .gfx-sheet { display:flex; flex-direction:column; gap:9px; position:absolute; inset:0; z-index:8; padding:12px 12px 16px; overflow-y:auto; overscroll-behavior:contain;"
+    + " background:var(--gfx-card, #FFFDF5); color:var(--gfx-text, #5A3A24); border:3px solid var(--gfx-line, #6B4528); border-radius:18px; box-shadow:0 14px 36px rgba(0,0,0,.35);"
+    + " opacity:0; transform:translateY(-14px); visibility:hidden; pointer-events:none; transition:opacity .18s, transform .18s, visibility .18s; }"
+    + " :host([data-menu]) .gfx-sheet { opacity:1; transform:none; visibility:visible; pointer-events:auto; }"
+    + " .gfx-sheet-top { display:flex; align-items:center; justify-content:space-between; gap:8px; } .gfx-sheet-top b { font-size:1.2em; font-weight:normal; }"
+    + " .gfx-sheet-now { display:flex; flex-direction:column; gap:7px; padding:9px; border:2px dashed color-mix(in srgb,var(--gfx-line, #6B4528) 45%,transparent); border-radius:14px; }"
+    + " .gfx-sheet-now > b { font-weight:normal; } .gfx-sheet .gfx-game-tools { justify-content:flex-start; flex-wrap:wrap; }"
+    + " .gfx-sheet .gfx-sheet-fold { display:flex; justify-content:space-between; width:100%; text-align:left; font-size:1em !important; padding:.45em .9em !important; }"
+    + " .gfx-sheet-body[hidden] { display:none; } .gfx-sheet-label { font-weight:normal; opacity:.8; margin-top:2px; }"
+    + " .gfx-sheet .gfx-game-info { margin:0; padding:0 4px; text-align:left; font-size:.86em; line-height:1.5; }"
+    + " .gfx-sheet .gfx-game-nav { position:static; display:grid; grid-template-columns:repeat(auto-fill, minmax(76px, 1fr)); gap:6px; width:auto; height:auto; max-height:none; overflow:visible; padding:0; margin:0; border:0; box-shadow:none; background:none; flex:none; }"
+    + " .gfx-sheet .gfx-game-tab { display:flex !important; flex-direction:column; align-items:center; padding:.35em .1em !important; } .gfx-sheet .gfx-game-tab i { font-size:1.5em !important; } .gfx-sheet .gfx-game-tab span { font-size:.76em; }"
+    + " .gfx-sheet-set { display:flex; flex-wrap:wrap; gap:6px; align-items:center; } .gfx-sheet .gfx-game-utils { display:flex; flex-direction:row; flex-wrap:wrap; gap:6px; }"
+    + " .gfx-sheet .gfx-game-utils > :last-child { display:none; } .gfx-sheet .gfx-game-util { font-size:.85em !important; }"
+    + " .gfx-sheet label { display:flex; align-items:center; gap:.4em; font-size:.9em; } .gfx-sheet select { font:inherit; font-size:16px; color:var(--gfx-text, #5A3A24); background:var(--gfx-card, #FFFDF5); border:2.5px solid var(--gfx-line, #6B4528); border-radius:999px; padding:.15em .7em; }"
+    + " .gfx-rotate { inset:44px 0 0 !important; } }"
+    // Upright: the game box reaches the bottom and the board sits in the middle of it.
+    + "@media (max-width:640px) { .gfx-load-games { height:100%; } .gfx-game-content { display:flex; flex-direction:column; } .gfx-game-stage { flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center; } }"
+    // On its side the height is what is short: ☰, the name and the scores stack in a narrow column on the left and the
+    // board takes the whole height beside it. The tall boards (macaron drop, pinball) drop their 170px floor.
+    + "@media (orientation:landscape) and (max-height:520px) { .gfx-load-games { font-size:14px; }"
+    + " .gfx-game-content { display:grid; grid-template-columns:112px minmax(0,1fr); grid-template-rows:minmax(0,1fr); column-gap:8px; padding:4px 6px 4px 4px; }"
+    + " .gfx-game-head { grid-column:1; grid-row:1; flex-direction:column; align-items:stretch; justify-content:flex-start; align-self:start; flex-wrap:nowrap; gap:6px; margin:0; }"
+    + " .gfx-game-head > .gfx-game-title { white-space:normal; } .gfx-game-head > .gfx-game-stats { margin:0; flex-wrap:wrap; justify-content:flex-start; } .gfx-menu-toggle { align-self:flex-start; }"
+    + " .gfx-game-stage { grid-column:2; grid-row:1; min-height:0; align-self:center; }"
     + " .gfx-game-board:is([data-kind=\"drop\"], [data-kind=\"pinball\"]) { width:min(100%, var(--room) * var(--fit, 1)); }"
-    + " .gfx-game-nav { flex-basis:150px; margin-top:46px; max-height:calc(100% - 46px); overscroll-behavior:contain; }"
-    + " .gfx-game-content { padding:6px 10px 8px; } }"
-    // Phones fold the menu twice: closed, the game fills the screen (no title row, no game bar, no difficulty row)
-    // and a ☰ pill before the game's name opens the first fold — the title row and the game bar with difficulty;
-    // [게임 목록] in that bar opens the second fold, every game as a grid. Picking a game folds both again.
-    + " .gfx-menu-toggle { display:none; flex:none; order:0; font-size:.85em !important; padding:.15em .55em !important; line-height:1.2; }"
-    + "@media (max-width:640px), (orientation:landscape) and (max-height:520px) { .gfx-menu-toggle { display:block; }"
-    + " :host(:not([data-menu])) .gfx-game-nav, :host(:not([data-menu])) .gfx-game-levels { display:none !important; }"
-    + " :host(:not([data-menu])) .gfx-game-head { margin-bottom:4px; flex-wrap:nowrap; } :host(:not([data-menu])) .gfx-game-head > .gfx-game-title { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }"
-    + " :host(:not([data-menu])) .gfx-game-head > .gfx-game-tools { order:1; flex:0 0 auto; } :host(:not([data-menu])) .gfx-game-head > .gfx-game-stats { flex:0 1 auto; }"
-    + " :host(:not([data-menu])) .gfx-game-content { padding-top:6px; } }"
-    + "@media (max-width:640px) { :host(:not([data-menu]):not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 112px); } }"
-    // Folded on an upright phone: thinner frames, so the board gets nearly the full width.
-    + "@media (max-width:640px) { :host(:not([data-menu])) .gfx-game-content { padding:4px 4px 6px; border-width:2px; } :host(:not([data-menu])) .gfx-game-board { padding:3px; } }"
-    // Folded on a phone on its side the height is what is short: the title, new game, scores and how-to go into a
-    // narrow column on the left and the board takes the whole height beside it.
-    + "@media (orientation:landscape) and (max-height:520px) { :host(:not([data-menu])) .gfx-load-games { gap:0; }"
-    + " :host(:not([data-menu])) .gfx-game-content { display:grid; grid-template-columns:128px minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); column-gap:8px; padding:4px 6px 4px 4px; border-width:2px; }"
-    + " :host(:not([data-menu])) .gfx-game-head { grid-column:1; grid-row:1; flex-direction:column; flex-wrap:nowrap; align-items:stretch; gap:5px; margin:0; }"
-    + " :host(:not([data-menu])) .gfx-game-head > .gfx-game-title { white-space:normal; font-size:.95em; } :host(:not([data-menu])) .gfx-game-head > .gfx-game-tools { justify-content:flex-start; }"
-    + " :host(:not([data-menu])) .gfx-game-head > .gfx-game-stats { margin:0; flex-wrap:wrap; justify-content:flex-start; } :host(:not([data-menu])) .gfx-menu-toggle { align-self:flex-start; }"
-    + " :host(:not([data-menu])) .gfx-game-info { grid-column:1; grid-row:2; align-self:start; margin-top:6px; font-size:.72em; line-height:1.35; text-align:left; overflow:hidden; }"
-    + " :host(:not([data-menu])) .gfx-game-stage { grid-column:2; grid-row:1 / span 2; min-height:0; } :host(:not([data-menu])) .gfx-game-board { padding:3px; }"
-    + " :host(:not([data-menu]):not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 30px); } }"
+    + " :host(:not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 24px); } }"
     // Games made for a wide screen ask to turn the phone; 그냥 세로로 dismisses it for this visit.
     + ".gfx-rotate { display:none; position:absolute; inset:var(--nav-h, 90px) 0 0; z-index:3; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:20px; text-align:center;"
     + " background:color-mix(in srgb,var(--gfx-card, #FFFDF5) 96%,transparent); border:3px solid var(--gfx-line, #6B4528); border-radius:18px; }"
@@ -6758,37 +6928,67 @@
   try { const saved = localStorage.getItem("gfx-games-preset"); if (saved && [...pick.options].some((o) => o.value === saved)) pick.value = saved; } catch {}
   on(pick, "change", apply);
   apply();
-  // Upright phones: [게임 목록] opens the whole list as a grid; picking a game, tapping the game or Esc closes it.
-  const shelf = el("button", "gfx-shelf-toggle gfx-game-util"); shelf.type = "button";
-  nav.insertBefore(shelf, nav.querySelector(".gfx-game-utils"));
-  const setShelf = (open) => { wrap.toggleAttribute("data-shelf", open); shelf.textContent = open ? "닫기 ▴" : "게임 목록 ▾"; shelf.setAttribute("aria-expanded", String(open)); };
-  setShelf(false);
-  on(shelf, "click", () => setShelf(!wrap.hasAttribute("data-shelf")));
-  on(panel, "pointerdown", (e) => { if (wrap.hasAttribute("data-shelf") && !e.target.closest?.(".gfx-game-nav")) setShelf(false); });
-  on(panel, "keydown", (e) => { if (e.key === "Escape" && wrap.hasAttribute("data-shelf")) setShelf(false); });
-  // In the sideways list the picked game may sit below the fold: bring it into view.
-  const reveal = () => panel.querySelector('.gfx-game-tab[aria-pressed="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  // Phones: the menu's first fold (title row, game bar, difficulty). Closed by default so the game gets the screen.
-  // Each game builds its title row anew, so the ☰ pill goes back in front of the name every time.
-  const menu = el("button", "gfx-menu-toggle gfx-game-util"); menu.type = "button";
-  const content = panel.querySelector(".gfx-game-content");
-  const seat = () => { const head = content.querySelector(".gfx-game-head"); if (head && menu.parentNode !== head) head.prepend(menu); };
+  // Phones: ☰ before the game's name opens the menu sheet over the game; in it 게임 설명 and 게임 목록 fold open.
+  // The game list (with the sound, pixel and size switches), the difficulty and 새 판, the how-to line, the theme and
+  // the fullscreen button are moved into the sheet while the screen is phone-sized, and back when it is not. Each
+  // game builds its title row anew, so the moving is redone whenever the content changes.
+  const PHONE = matchMedia("(max-width:640px), (orientation:landscape) and (max-height:520px)");
+  const content = panel.querySelector(".gfx-game-content"), utils = nav.querySelector(".gfx-game-utils"), header = document.querySelector("header"), theme = header.querySelector("label"), full = document.getElementById("fullscreen");
+  full.classList.add("gfx-game-util");
+  const menu = el("button", "gfx-menu-toggle gfx-game-util", "☰"); menu.type = "button"; menu.setAttribute("aria-label", "메뉴 펼치기");
+  const menuSheet = el("div", "gfx-sheet"); menuSheet.setAttribute("role", "dialog"); menuSheet.setAttribute("aria-label", "메뉴");
+  const shut = el("button", "gfx-game-util", "✕ 닫기"); shut.type = "button";
+  const top = el("div", "gfx-sheet-top"); top.append(el("b", "", "☰ 메뉴"), shut);
+  const nowName = el("b"), toolsSlot = el("div"), now = el("div", "gfx-sheet-now"); now.append(nowName, toolsSlot);
+  const fold = (label, body) => {
+    const b = el("button", "gfx-sheet-fold gfx-game-util"); b.type = "button";
+    const set = open => { body.hidden = !open; b.replaceChildren(el("span", "", label), el("span", "", open ? "▴" : "▾")); b.setAttribute("aria-expanded", String(open)); };
+    set(false); on(b, "click", () => set(body.hidden)); return [b, set];
+  };
+  const infoSlot = el("div", "gfx-sheet-body"), listSlot = el("div", "gfx-sheet-body"), setBox = el("div", "gfx-sheet-set");
+  const [infoFold, setInfo] = fold("📖 게임 설명", infoSlot), [listFold, setList] = fold("🎮 게임 목록", listSlot);
+  menuSheet.append(top, now, infoFold, infoSlot, listFold, listSlot, el("b", "gfx-sheet-label", "⚙️ 설정"), setBox);
+  panel.append(menuSheet);
+  let phone = false;
+  const seat = () => {
+    const head = content.querySelector(".gfx-game-head");
+    if (head && menu.parentNode !== head) head.prepend(menu);
+    if (!phone) return;
+    const tools = content.querySelector(".gfx-game-head > .gfx-game-tools"), info = content.querySelector(":scope > .gfx-game-info");
+    if (tools) toolsSlot.replaceChildren(tools);
+    if (info) infoSlot.replaceChildren(info);
+    nowName.textContent = "지금 게임 · " + (content.querySelector(".gfx-game-title span")?.textContent || "");
+  };
   new MutationObserver(seat).observe(content, { childList: true });
   const setMenu = (open) => {
-    wrap.toggleAttribute("data-menu", open); document.body.toggleAttribute("data-menu", open);
-    menu.textContent = open ? "✕" : "☰"; menu.setAttribute("aria-label", open ? "메뉴 접기" : "메뉴 펼치기"); menu.setAttribute("aria-expanded", String(open));
-    if (!open) setShelf(false);
+    wrap.toggleAttribute("data-menu", open); menu.setAttribute("aria-expanded", String(open));
+    if (open) { menuSheet.scrollTop = 0; shut.focus({ preventScroll: true }); } else { setInfo(false); setList(false); }
+  };
+  const place = () => {
+    phone = PHONE.matches;
+    if (phone) { listSlot.replaceChildren(nav); setBox.replaceChildren(utils, theme, full); seat(); return; }
+    setMenu(false);
+    panel.prepend(nav); nav.append(utils); header.append(theme, full);
+    const head = content.querySelector(".gfx-game-head"), tools = toolsSlot.firstElementChild, info = infoSlot.firstElementChild;
+    if (head && tools) head.insertBefore(tools, head.querySelector(".gfx-game-stats"));
+    if (head && info) head.after(info);
   };
   setMenu(false);
-  on(menu, "click", () => setMenu(!wrap.hasAttribute("data-menu")));
+  on(menu, "click", () => setMenu(true));
+  on(shut, "click", () => setMenu(false));
+  on(panel, "keydown", (e) => { if (e.key === "Escape" && wrap.hasAttribute("data-menu")) setMenu(false); });
   // The browser's own fullscreen hides its address bar too, where the phone allows it (not on iPhone).
   if (document.fullscreenEnabled) {
-    const full = document.getElementById("fullscreen"); full.hidden = false;
-    const sync = () => { const now = !!document.fullscreenElement; full.textContent = now ? "⤡" : "⛶"; full.setAttribute("aria-label", now ? "전체 화면 끝내기" : "전체 화면"); full.title = full.getAttribute("aria-label"); };
+    full.hidden = false;
+    const sync = () => { const now2 = !!document.fullscreenElement; full.textContent = now2 ? "⤡ 창 모드" : "⛶ 전체 화면"; full.setAttribute("aria-label", now2 ? "전체 화면 끝내기" : "전체 화면"); };
     on(full, "click", async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen({ navigationUI: "hide" }); } catch {} });
     on(document, "fullscreenchange", sync); sync();
   }
-  on(panel, "click", (e) => { if (e.target.closest?.(".gfx-game-tab")) { setShelf(false); setMenu(false); requestAnimationFrame(reveal); } });
+  // In the sideways desktop list the picked game may sit below the fold: bring it into view. Picking one closes the sheet.
+  const reveal = () => { if (!phone) panel.querySelector('.gfx-game-tab[aria-pressed="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" }); };
+  on(panel, "click", (e) => { if (e.target.closest?.(".gfx-game-tab")) { setMenu(false); requestAnimationFrame(reveal); } });
+  PHONE.addEventListener("change", place);
+  place();
   panel.querySelector('[data-game="shop"]')?.click();
 })();
 </script>
