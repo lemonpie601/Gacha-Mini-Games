@@ -115,7 +115,7 @@ Kenney의 효과음(CC0, 아래 '에셋 출처')을 씁니다: 버튼·선택은
 
 ## 설치
 
-마리나라 설정의 개인 확장에서 `Gacha-Mini-Games-1.14.1.personal-extension.zip`을 설치합니다.
+마리나라 설정의 개인 확장에서 `Gacha-Mini-Games-1.14.2.personal-extension.zip`을 설치합니다.
 
 생성 화면이 2.5초 이상 이어지면 미니게임이 나타납니다.
 
@@ -125,6 +125,10 @@ Kenney의 효과음(CC0, 아래 '에셋 출처')을 씁니다: 버튼·선택은
 node --test tools/test-loading.mjs tools/test-extra-games.mjs tools/test-difficulty.mjs
 node tools/test-games-browser.mjs  # Windows의 Microsoft Edge 필요
 ```
+
+## 1.14.2
+
+휴대폰용 index 페이지의 메뉴를 두 번 접게 바꿨습니다. 처음에는 게임 화면이 화면 전체를 쓰고, 게임 이름 앞의 ☰를 누르면 첫 번째 접기(제목·테마, 게임 바, 난이도)가 펼쳐집니다. 거기서 [게임 목록]을 누르면 두 번째 접기로 모든 게임이 격자로 나옵니다. 게임을 고르면 둘 다 다시 접힙니다. 접힌 상태에서는 새 판 버튼이 제목 줄로 올라가고, 가로 화면에서는 오른쪽 목록 칸이 사라져 게임이 가로 폭을 다 씁니다. 지원하는 브라우저(안드로이드 등)에서는 제목 줄의 ⛶ 버튼으로 주소창까지 숨기는 진짜 전체 화면을 쓸 수 있습니다. 확장(zip) 쪽 게임은 1.14.1과 같습니다.
 
 ## 1.14.1
 

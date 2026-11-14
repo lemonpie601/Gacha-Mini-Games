@@ -52,6 +52,18 @@ MOUNT = r"""
     + " .gfx-game-board:is([data-kind=\"drop\"], [data-kind=\"pinball\"]) { width:min(100%, var(--room) * var(--fit, 1)); }"
     + " .gfx-game-nav { flex-basis:150px; margin-top:46px; max-height:calc(100% - 46px); overscroll-behavior:contain; }"
     + " .gfx-game-content { padding:6px 10px 8px; } }"
+    // Phones fold the menu twice: closed, the game fills the screen (no title row, no game bar, no difficulty row)
+    // and a ☰ pill before the game's name opens the first fold — the title row and the game bar with difficulty;
+    // [게임 목록] in that bar opens the second fold, every game as a grid. Picking a game folds both again.
+    + " .gfx-menu-toggle { display:none; flex:none; order:0; font-size:.85em !important; padding:.15em .55em !important; line-height:1.2; }"
+    + "@media (max-width:640px), (orientation:landscape) and (max-height:520px) { .gfx-menu-toggle { display:block; }"
+    + " :host(:not([data-menu])) .gfx-game-nav, :host(:not([data-menu])) .gfx-game-levels { display:none !important; }"
+    + " :host(:not([data-menu])) .gfx-game-head { margin-bottom:4px; flex-wrap:nowrap; } :host(:not([data-menu])) .gfx-game-head > .gfx-game-title { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }"
+    + " :host(:not([data-menu])) .gfx-game-head > .gfx-game-tools { order:1; flex:0 0 auto; } :host(:not([data-menu])) .gfx-game-head > .gfx-game-stats { flex:0 1 auto; }"
+    + " :host(:not([data-menu])) .gfx-game-content { padding-top:6px; } }"
+    + "@media (max-width:640px) { :host(:not([data-menu]):not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 112px); } }"
+    + "@media (orientation:landscape) and (max-height:520px) { :host(:not([data-menu])) .gfx-load-games { gap:0; }"
+    + " :host(:not([data-menu]):not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 88px); } }"
     // Games made for a wide screen ask to turn the phone; 그냥 세로로 dismisses it for this visit.
     + ".gfx-rotate { display:none; position:absolute; inset:var(--nav-h, 90px) 0 0; z-index:3; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:20px; text-align:center;"
     + " background:color-mix(in srgb,var(--gfx-card, #FFFDF5) 96%,transparent); border:3px solid var(--gfx-line, #6B4528); border-radius:18px; }"
@@ -106,7 +118,27 @@ MOUNT = r"""
   on(panel, "keydown", (e) => { if (e.key === "Escape" && wrap.hasAttribute("data-shelf")) setShelf(false); });
   // In the sideways list the picked game may sit below the fold: bring it into view.
   const reveal = () => panel.querySelector('.gfx-game-tab[aria-pressed="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  on(panel, "click", (e) => { if (e.target.closest?.(".gfx-game-tab")) { setShelf(false); requestAnimationFrame(reveal); } });
+  // Phones: the menu's first fold (title row, game bar, difficulty). Closed by default so the game gets the screen.
+  // Each game builds its title row anew, so the ☰ pill goes back in front of the name every time.
+  const menu = el("button", "gfx-menu-toggle gfx-game-util"); menu.type = "button";
+  const content = panel.querySelector(".gfx-game-content");
+  const seat = () => { const head = content.querySelector(".gfx-game-head"); if (head && menu.parentNode !== head) head.prepend(menu); };
+  new MutationObserver(seat).observe(content, { childList: true });
+  const setMenu = (open) => {
+    wrap.toggleAttribute("data-menu", open); document.body.toggleAttribute("data-menu", open);
+    menu.textContent = open ? "✕" : "☰"; menu.setAttribute("aria-label", open ? "메뉴 접기" : "메뉴 펼치기"); menu.setAttribute("aria-expanded", String(open));
+    if (!open) setShelf(false);
+  };
+  setMenu(false);
+  on(menu, "click", () => setMenu(!wrap.hasAttribute("data-menu")));
+  // The browser's own fullscreen hides its address bar too, where the phone allows it (not on iPhone).
+  if (document.fullscreenEnabled) {
+    const full = document.getElementById("fullscreen"); full.hidden = false;
+    const sync = () => { const now = !!document.fullscreenElement; full.textContent = now ? "⤡" : "⛶"; full.setAttribute("aria-label", now ? "전체 화면 끝내기" : "전체 화면"); full.title = full.getAttribute("aria-label"); };
+    on(full, "click", async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen({ navigationUI: "hide" }); } catch {} });
+    on(document, "fullscreenchange", sync); sync();
+  }
+  on(panel, "click", (e) => { if (e.target.closest?.(".gfx-game-tab")) { setShelf(false); setMenu(false); requestAnimationFrame(reveal); } });
   panel.querySelector('[data-game="shop"]')?.click();
 })();
 """
@@ -145,6 +177,7 @@ HTML = """<!doctype html>
   h1 small { font-size:.6em; opacity:.6; margin-left:.4em; }
   label { display:flex; align-items:center; gap:.4em; font-size:.9em; }
   select { font:inherit; color:var(--gfx-text); background:var(--gfx-card); border:2.5px solid var(--gfx-line); border-radius:999px; padding:.2em .8em; box-shadow:0 2px 0 var(--gfx-line); }
+  #fullscreen { display:none; flex:none; font:inherit; font-size:1.05em; line-height:1; color:var(--gfx-text); background:var(--gfx-card); border:2.5px solid var(--gfx-line); border-radius:999px; padding:.2em .55em; box-shadow:0 2px 0 var(--gfx-line); cursor:pointer; }
   #games { flex:1; min-height:520px; display:block; padding:10px 12px 12px; }
   /* Phones: one slim header row and the games fill the rest of the screen, clear of the notch and the home bar.
      The picker keeps 16px type so iOS does not zoom in when it opens. */
@@ -156,6 +189,10 @@ HTML = """<!doctype html>
     h1 small { margin-left:.3em; }
     label .tag { display:none; }
     select { max-width:9em; padding:.1em .6em; }
+    label { margin-left:auto; }
+    #fullscreen:not([hidden]) { display:block; padding:.1em .5em; }
+    /* The menu's first fold: folded, the title row goes too and the games take the whole screen. */
+    body:not([data-menu]) header { display:none; }
     #games { min-height:0; padding:6px max(6px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)); }
   }
   /* Phones on their side: no title row, the games get the whole height. The picker sits at the top of the game
@@ -163,9 +200,11 @@ HTML = """<!doctype html>
   @media (orientation:landscape) and (max-height:520px) {
     html, body { overscroll-behavior:none; }
     body { height:100dvh; -webkit-tap-highlight-color:transparent; -webkit-text-size-adjust:100%; }
-    header { position:absolute; z-index:1; top:6px; right:max(8px, env(safe-area-inset-right)); width:150px; padding:0; }
+    header { position:absolute; z-index:1; top:6px; right:max(8px, env(safe-area-inset-right)); width:150px; padding:0; flex-wrap:nowrap; gap:5px; }
     h1, label .tag { display:none; }
-    label, select { width:100%; }
+    label { flex:1; min-width:0; } select { width:100%; }
+    #fullscreen:not([hidden]) { display:block; padding:.1em .45em; }
+    body:not([data-menu]) header { display:none; }
     select { padding:.15em .6em; }
     #games { min-height:0; padding:6px max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
   }
@@ -190,6 +229,7 @@ HTML = """<!doctype html>
       </optgroup>
     </select>
   </label>
+  <button id="fullscreen" type="button" hidden></button>
 </header>
 <div id="games"></div>
 <script>

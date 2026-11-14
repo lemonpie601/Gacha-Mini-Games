@@ -1,4 +1,4 @@
-/* Gacha Mini Games v1.14.1 — personal extension for Gacha Forge on Marinara Engine.
+/* Gacha Mini Games v1.14.2 — personal extension for Gacha Forge on Marinara Engine.
  * While a chapter or story is being generated, the generation screen gets a column of small games on its right:
  * 지뢰찾기, 사과 상자 (the fruit follows the 말랑 colour preset), 2048, 짝 맞추기, 쿠키 가게, 디저트 핀볼 and more. Closing the column or
  * finishing generation removes them; nothing here touches the run, rewards or the generation request.
