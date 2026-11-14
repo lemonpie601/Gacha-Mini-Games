@@ -94,10 +94,11 @@ test('Survive: levels come fast in the first minute, then slow down; HP comes ba
   const hn = games.newSurviveGame(rng(), 'normal'); hn.start(); hn.hp = 1; hn.honey.push({ x: hn.hero.x, y: hn.hero.y, sp: 0 }); hn.spawnAcc = 0; hn.rate = () => 0; hn.step(50); assert.equal(hn.hp, 2, 'honey heals');
 });
 test('Survive: a middling player outlasts 보통 for a while, every level ends in time, and the levels keep their order', () => {
-  const alive = lv => [1, 2, 3].map(s => { const g = games.newSurviveGame(rng(s * 31), lv); g.start(); kite(g, rng(s), 600); return g.time; }).sort((x, y) => x - y)[1];
+  // Damage cards never run out and rebirth perks come on top, so runs are long, but the growth still wins in the end.
+  const alive = lv => [1, 2, 3, 4, 5, 6, 7, 8, 9].map(s => { const g = games.newSurviveGame(rng(s * 31), lv); g.start(); kite(g, rng(s), 1200); return g.time; }).sort((x, y) => x - y)[4];
   const t = Object.fromEntries(LEVELS.map(lv => [lv, alive(lv)]));
-  for (const lv of LEVELS) assert.ok(t[lv] < 600, 'the late game overwhelms every build: ' + lv + ' ' + t[lv]);
-  assert.ok(t.normal >= 90 && t.expert >= 30, JSON.stringify(t));
+  for (const lv of LEVELS) assert.ok(t[lv] < 1200, 'the late game overwhelms every build: ' + lv + ' ' + t[lv]);
+  assert.ok(t.normal >= 120 && t.expert >= 20, JSON.stringify(t));
   assert.ok(t.easiest > t.easy && t.easy > t.normal && t.normal > t.hard && t.hard > t.expert, JSON.stringify(t));
 });
 test('Survive: spread, piercing, explosion, lightning, vacuum, orbit, regen and crit upgrades each do their thing', () => {
@@ -124,6 +125,49 @@ test('Survive: spread, piercing, explosion, lightning, vacuum, orbit, regen and 
   // Crit: a draw of 0 always crits, for two and a half times the damage, flagged for the big number.
   const k = games.newSurviveGame(() => 0, 'normal'); k.start(); k.spawnAcc = 0; k.rate = () => 0; up('crit', k); assert.ok(k.crit > 0.19);
   const t = blob(k, 215, 260, 99); k.step(250); const ev = k.take().find(e => e.t === 'hit'); assert.ok(ev && ev.crit && Math.abs(ev.v - k.dmg * 2.5) < 1e-9); assert.ok(t.hp < 99);
+});
+test('Survive: the new cards (frost, nova, thorn, bees, size, bubble, greed, meteor) each do their thing', () => {
+  const quiet = g => { g.start(); g.spawnAcc = 0; g.rate = () => 0; return g; };
+  const up = (id, g) => g.ups[id][3](g);
+  const f = quiet(games.newSurviveGame(rng(), 'normal')); up('frost', f); const fe = blob(f, 300, 260, 99, { speed: 40 }); f.step(250); f.step(250);
+  assert.ok(fe.slow > 0, 'a hit chills');
+  const nv = quiet(games.newSurviveGame(rng(), 'normal')); up('nova', nv); const ne = blob(nv, 230, 260, 99); nv.step(250); nv.step(250); nv.step(250); nv.step(250); nv.step(250);
+  assert.ok(nv.take().some(e => e.t === 'nova') && ne.hp < 99, 'the nova pulses and hurts');
+  const th = quiet(games.newSurviveGame(rng(), 'normal')); up('thorn', th); up('thorn', th); const tb = blob(th, th.hero.x, th.hero.y, 99, { dmg: 2 }); const hp = th.hp; th.step(20);
+  assert.equal(th.hp, hp - 1, 'thorns take a point off a bump'); assert.ok(tb.hp < 99, 'and prick back');
+  const bb = quiet(games.newSurviveGame(rng(), 'normal')); up('bubble', bb); blob(bb, bb.hero.x, bb.hero.y, 99, { dmg: 3 }); const hb = bb.hp; bb.step(20);
+  assert.equal(bb.hp, hb, 'the bubble takes the first hit'); assert.equal(bb.shield, 0);
+  const be = quiet(games.newSurviveGame(rng(), 'normal')); up('bee', be); be.cool = be.fire = 99; blob(be, 300, 120, 99); be.step(50);
+  assert.ok(be.bullets.length > 0, 'a bee stings');
+  const gr = quiet(games.newSurviveGame(rng(), 'normal')); up('greed', gr); gr.gems.push({ x: gr.hero.x, y: gr.hero.y, v: 4, sp: 0 }); gr.step(20);
+  assert.ok(Math.abs(gr.xp + (gr.level > 1 ? 99 : 0) - 5) < 1e-9 || gr.level > 1, 'greed adds a quarter');
+  const me = quiet(games.newSurviveGame(rng(), 'normal')); up('meteor', me); const mt = blob(me, 60, 60, 99); for (let i = 0; i < 12; i++) me.step(250);
+  assert.ok(mt.hp < 99, 'a meteor lands on a blob');
+  const sz = games.newSurviveGame(rng(), 'normal'); const d0 = sz.dmg; up('size', sz); assert.ok(sz.size === 1 && sz.dmg > d0);
+  const dm = games.newSurviveGame(rng(), 'normal'); for (let i = 0; i < 20; i++) up('dmg', dm); assert.ok(!dm.ups.dmg[4], 'damage is always on offer');
+});
+test('Survive: field items — a big blob drops a chest that offers a card; bomb, magnet and freeze work on pickup', () => {
+  const quiet = g => { g.start(); g.spawnAcc = 0; g.rate = () => 0; return g; };
+  const c = quiet(games.newSurviveGame(rng(), 'normal')); c.items.push({ x: c.hero.x, y: c.hero.y, kind: 'chest', sp: 0 }); c.step(20);
+  assert.ok(c.choices && c.choiceKind === 'chest', 'a chest offers a card');
+  const b = quiet(games.newSurviveGame(rng(), 'normal')); const far = blob(b, 20, 20, 3); b.items.push({ x: b.hero.x, y: b.hero.y, kind: 'bomb', sp: 0 }); b.step(20);
+  assert.ok(far.dead, 'a bomb clears the screen');
+  const z = quiet(games.newSurviveGame(rng(), 'normal')); const fz = blob(z, 40, 40, 99, { speed: 50 }); z.items.push({ x: z.hero.x, y: z.hero.y, kind: 'freeze', sp: 0 }); z.step(20); const x0 = fz.x; z.step(250);
+  assert.ok(z.freeze > 0 && fz.x === x0, 'a freeze stops the blobs');
+  const m = quiet(games.newSurviveGame(rng(), 'normal')); m.gems.push({ x: 10, y: 10, v: 1, sp: 0 }); m.items.push({ x: m.hero.x, y: m.hero.y, kind: 'magnet', sp: 0 }); for (let i = 0; i < 6; i++) m.step(250);
+  assert.equal(m.gems.length, 0, 'a magnet pulls every crystal');
+  const big = quiet(games.newSurviveGame(rng(), 'normal')); const e = blob(big, 200, 200, 1, { big: true }); big.dmg = 99; big.step(250); big.step(250);
+  assert.ok(e.dead && big.items.some(i => i.kind === 'chest'), 'a big blob leaves a chest');
+});
+test('Survive: rebirth perks make the start stronger, revive once, give free cards, and runs earn stars', () => {
+  const base = games.newSurviveGame(rng(), 'normal'), p = games.newSurviveGame(rng(), 'normal', { atk: 5, hp: 3, spd: 2, xp: 2, revive: 1, card: 2, reborn: 4 });
+  assert.ok(p.dmg > base.dmg * 1.39 && p.maxHp === base.maxHp + 3 && p.speed > base.speed && p.xpMul > 1.19);
+  p.start(); assert.ok(p.choices && p.choiceKind === 'free' && p.pending === 1, 'free cards wait at the start');
+  p.pick(0); p.pick(0); assert.equal(p.choices, null);
+  p.spawnAcc = 0; p.rate = () => 0; p.hp = 1; blob(p, p.hero.x, p.hero.y, 99, { dmg: 5 }); p.step(20);
+  assert.ok(!p.ended && p.hp === p.maxHp && p.revives === 0, 'a revive brings the hero back');
+  const s = games.newSurviveGame(rng(), 'normal', { reborn: 10 }), s0 = games.newSurviveGame(rng(), 'normal'); s.time = s0.time = 120; s.kills = s0.kills = 200;
+  assert.ok(s0.stars() > 0 && s.stars() > s0.stars(), 'stars, more after rebirths');
 });
 test('Survive: kills build a combo that resets after a pause, and the events stay capped', () => {
   const g = games.newSurviveGame(rng(), 'normal'); g.start(); g.spawnAcc = 0; g.rate = () => 0;

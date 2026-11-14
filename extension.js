@@ -1,4 +1,4 @@
-/* Gacha Mini Games v1.14.3 — personal extension for Gacha Forge on Marinara Engine.
+/* Gacha Mini Games v1.15.0 — personal extension for Gacha Forge on Marinara Engine.
  * While a chapter or story is being generated, the generation screen gets a column of small games on its right:
  * 지뢰찾기, 사과 상자 (the fruit follows the 말랑 colour preset), 2048, 짝 맞추기, 쿠키 가게, 디저트 핀볼 and more. Closing the column or
  * finishing generation removes them; nothing here touches the run, rewards or the generation request.
@@ -1262,14 +1262,16 @@
   // upgrades that stack. The field is 360×520. The early blobs die to one shot; the pressure grows mostly in numbers (up to
   // 150 on screen), a wave rushes in now and then and a big blob arrives every minute. Honey and a slow regen heal.
   // Everything the screen should celebrate (hits, kills, blasts, level-ups) is pushed to game.events for the UI to take().
-  function newSurviveGame(random = Math.random, difficulty = 'normal') {
+  // perks: the rebirth upgrades bought between runs (levels by name), kept by the UI; the model only applies them.
+  function newSurviveGame(random = Math.random, difficulty = 'normal', perks = {}) {
     // Start HP, seconds per regen HP, toughness gained per minute, spawns per second, blob speed (start, cap), big blob contact damage,
     // seconds until the first surrounding ring, and toughness growth per minute after cfg[9] seconds, then when bumps start to hurt more and how many seconds each extra point takes.
     const cfg = ({ easiest: [10, 7, 1.2, 1.5, 32, 65, 1, 75, 1.6, 150, 200, 60], easy: [9, 9, 2, 2, 40, 80, 2, 55, 1.9, 90, 130, 50], normal: [8, 12, 3, 2.6, 50, 95, 2, 40, 2.1, 60, 80, 45], hard: [7, 16, 4.5, 3.2, 60, 110, 3, 30, 2.3, 35, 50, 35], expert: [6, 22, 6, 4, 70, 130, 3, 25, 2.6, 10, 20, 25] })[difficulty] || [8, 12, 3, 2.6, 50, 95, 2, 40, 2.1, 60, 80, 45];
     const W = 360, H = 520, MAX = 150;
     // id: [icon, name, effect, apply, still offered?]
     const UPS = {
-      dmg: ['🍬', '단맛 폭탄', '피해 +35% (거듭할수록 조금씩 덜)', g => { g.dmg *= 1 + 0.35 * Math.pow(0.8, g.dmgN++); }, g => g.dmgN < 6],
+      // Damage never runs out, so a long run always has something to take; each stack adds a little less (never under 10%).
+      dmg: ['🍬', '단맛 폭탄', '피해 +35% · 거듭할수록 조금씩 덜 (끝없이 올라요)', g => { g.dmg *= 1 + Math.max(0.1, 0.35 * Math.pow(0.8, g.dmgN++)); }],
       rate: ['⚡', '빠른 손', '발사 간격 -18%', g => { g.cool = Math.max(0.2, g.cool * 0.82); }, g => g.cool > 0.21],
       multi: ['✨', '부채꼴 발사', '발사체 +2 · 3갈래 → 최대 5갈래', g => { g.shots += 2; }, g => g.shots < 5],
       pierce: ['🍢', '관통 꼬치', '발사체가 적 1마리를 더 뚫어요', g => { g.pierce += 1; }, g => g.pierce < 3],
@@ -1281,15 +1283,35 @@
       speed: ['👟', '날쌘 젤리', '이동 속도 +20%', g => { g.speed = Math.min(190, g.speed * 1.2); }, g => g.speed < 189],
       pickup: ['🧲', '자석 껌', '줍는 범위 +60%', g => { g.pickup *= 1.6; }, g => g.pickup < 200],
       regen: ['🍀', '젤리 재생', 'HP가 더 빨리 차올라요', g => { g.regenEvery = Math.max(5, g.regenEvery * 0.8); }, g => g.regenEvery > 5.1],
-      maxhp: ['🧡', '탄탄 젤리', '최대 HP +2 · 2 회복', g => { g.maxHp += 2; g.hp = Math.min(g.maxHp, g.hp + 2); }, g => g.maxHp < cfg[0] + 4],
+      maxhp: ['🧡', '탄탄 젤리', '최대 HP +2 · 2 회복', g => { g.maxHp += 2; g.hp = Math.min(g.maxHp, g.hp + 2); }, g => g.maxHp < g.baseHp + 4],
+      frost: ['❄️', '얼음 사탕', '맞은 적이 잠깐 느려져요 · 단계마다 더 느리게', g => { g.frost++; }, g => g.frost < 3],
+      nova: ['🌟', '별빛 파동', '몇 초마다 주변 적을 밀치며 큰 피해', g => { g.nova++; g.novaT = Math.min(g.novaT, 1); }, g => g.nova < 3],
+      thorn: ['🌵', '가시 갑옷', '부딪히면 주변에 가시 피해 · 2단계부터 받는 피해 -1', g => { g.thorn++; }, g => g.thorn < 3],
+      bee: ['🐝', '꿀벌 친구', '곁을 날며 침을 쏘는 꿀벌 +1', g => { g.bees++; }, g => g.bees < 3],
+      size: ['🎈', '왕사탕 탄', '발사체가 커지고 피해 +10%', g => { g.size++; g.dmg *= 1.1; }, g => g.size < 3],
+      bubble: ['🫧', '비눗방울 막', '한 번 막아 주는 막 · 단계마다 빨리 다시 생겨요', g => { g.bubble++; g.shield = 1; g.shieldT = 0; }, g => g.bubble < 3],
+      greed: ['💰', '욕심쟁이', '반짝이 경험치 +25%', g => { g.greed++; g.xpMul *= 1.25; }, g => g.greed < 3],
+      meteor: ['☄️', '유성우', '몇 초마다 별똥별이 적 위로 떨어져요', g => { g.meteor++; g.meteorT = Math.min(g.meteorT, 1); }, g => g.meteor < 3],
       heal: ['🍯', '시럽 회복', 'HP 4 회복', g => { g.hp = Math.min(g.maxHp, g.hp + 4); }, g => g.hp < g.maxHp],
     };
     const game = { w: W, h: H, hero: { x: W / 2, y: H / 2, r: 11 }, hp: cfg[0], maxHp: cfg[0], dmg: 1.4, cool: 0.45, shots: 1, orbit: 0, speed: 105, pickup: 70, pierce: 0, boom: 0, chain: 0, crit: 0.05, dmgN: 0, vac: 0, regenEvery: cfg[1],
       enemies: [], bullets: [], gems: [], honey: [], bolts: [], events: [], stacks: {}, time: 0, over: 0, kills: 0, score: 0, level: 1, xp: 0, need: 2, pending: 0, choices: null, started: false, ended: false,
-      invuln: 0, hurtAt: -9, killAt: -9, gemAt: -9, levelAt: -9, bigAt: -9, waveAt: -9, ringAt: -9, spin: 0, fire: 0, dx: 0, dy: 0, nextBig: 60, nextWave: 25, nextRing: cfg[7], spawnAcc: 3, regenT: 0, vacT: 0, vacOn: 0, combo: 0, comboAt: -9, comboMax: 0, ids: 0 };
+      frost: 0, nova: 0, novaT: 0, thorn: 0, bees: 0, beeT: 0, size: 0, bubble: 0, shield: 0, shieldT: 0, greed: 0, xpMul: 1, meteor: 0, meteorT: 0, meteors: [], items: [], freeze: 0,
+      revives: 0, free: 0, luck: 0, reborn: 0, choiceKind: 'level', invuln: 0, hurtAt: -9, killAt: -9, gemAt: -9, levelAt: -9, bigAt: -9, waveAt: -9, ringAt: -9, spin: 0, fire: 0, dx: 0, dy: 0, nextBig: 60, nextWave: 25, nextRing: cfg[7], spawnAcc: 3, regenT: 0, vacT: 0, vacOn: 0, combo: 0, comboAt: -9, comboMax: 0, ids: 0 };
     const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
     game.ups = UPS;
-    game.start = () => { if (!game.ended) game.started = true; };
+    // Rebirth perks: a little stronger from the first second, a revive or two, free cards at the start.
+    const P = k => Math.max(0, Math.floor(Number(perks[k]) || 0));
+    game.dmg *= 1 + 0.08 * P('atk'); game.maxHp = game.hp = cfg[0] + P('hp'); game.speed *= 1 + 0.05 * P('spd'); game.xpMul = 1 + 0.1 * P('xp');
+    game.cool *= Math.pow(0.95, P('cool')); game.pickup *= 1 + 0.12 * P('magnet'); game.revives = Math.min(2, P('revive')); game.free = Math.min(3, P('card'));
+    game.luck = P('luck'); game.crit += 0.02 * game.luck; game.reborn = P('reborn'); game.baseHp = game.maxHp;
+    // Rebirth stars a run earns: time, kills and level, a little more for every rebirth so far.
+    game.stars = () => Math.floor((game.time / 6 + game.kills / 25 + game.level * 3) * (1 + 0.1 * game.reborn));
+    game.start = () => {
+      if (game.ended) return;
+      if (!game.started && game.free > 0) { game.pending = game.free - 1; offer('free'); }
+      game.started = true;
+    };
     // The stick: a direction with length 0..1.
     game.aim = (x, y) => { const m = Math.hypot(x, y); if (!(m > 0)) { game.dx = game.dy = 0; return; } const k = Math.min(1, m) / m; game.dx = x * k; game.dy = y * k; };
     // Blobs toughen slowly; what climbs is their number.
@@ -1298,7 +1320,8 @@
     game.touch = () => 1 + Math.floor(Math.max(0, game.time - cfg[10]) / cfg[11]);
     game.rate = () => cfg[3] * (0.8 + game.time / 50) * (1 + Math.max(0, game.time - 150) / 120);
     const emit = (t, x, y, v, extra) => { if (game.events.length < 300) game.events.push({ t, x, y, v, ...extra }); };
-    const offer = () => {
+    const offer = (kind = 'level') => {
+      game.choiceKind = kind;
       const ids = Object.keys(UPS).filter(k => !UPS[k][4] || UPS[k][4](game));
       if (!ids.length) ids.push('heal'); // a full build still gets a card, so the run never waits on an empty choice
       game.choices = [];
@@ -1308,7 +1331,7 @@
       const c = game.choices && game.choices[i];
       if (!c) return false;
       UPS[c.id][3](game); game.stacks[c.id] = c.lv; game.choices = null; emit('power', game.hero.x, game.hero.y, c.lv);
-      if (game.pending > 0) { game.pending--; offer(); }
+      if (game.pending > 0) { game.pending--; offer(game.choiceKind); }
       return true;
     };
     const spawn = (big, x, y, elite) => {
@@ -1336,8 +1359,19 @@
       for (let i = 0; i < n; i++) gem(e.x + (n > 1 ? (random() - 0.5) * 40 : 0), e.y + (n > 1 ? (random() - 0.5) * 40 : 0), e.big ? 3 : 1);
       // Honey: sometimes from a blob, always from a big one, and for every 25 kills in a row.
       if ((e.big || random() < 0.025 || game.combo % 25 === 0) && game.honey.length < 4) game.honey.push({ x: e.x, y: e.y, sp: 0 });
+      if (e.big) game.items.push({ x: e.x, y: e.y, kind: 'chest', sp: 0 });
+      else if (game.items.length < 5 && random() < 0.006 * (1 + 0.25 * game.luck)) game.items.push({ x: e.x, y: e.y, kind: ['bomb', 'magnet', 'freeze'][Math.floor(random() * 3)], sp: 0 });
       if (game.boom && depth < Math.min(2, game.boom)) blast(e.x, e.y, depth);
     };
+    const useItem = it => {
+      const h = game.hero; emit('item', h.x, h.y, 0, { kind: it.kind });
+      if (it.kind === 'bomb') { for (const o of game.enemies) hit(o, game.dmg * (o.big ? 6 : 12), 0, true); emit('boom', h.x, h.y, 260); }
+      else if (it.kind === 'magnet') { game.vacOn = 1.5; emit('vac', h.x, h.y, 0); }
+      else if (it.kind === 'freeze') game.freeze = 3.5;
+      else if (it.kind === 'chest') { if (game.choices) game.pending++; else offer('chest'); }
+    };
+    // A shove that clears the hero some room.
+    const shove = (r, by) => { const h = game.hero; for (const o of game.enemies) { const od = Math.hypot(o.x - h.x, o.y - h.y) || 1; if (od < r) { o.x += (o.x - h.x) / od * by; o.y += (o.y - h.y) / od * by; } } };
     // quiet: part of a blast, so no number for every blob in it.
     const hit = (e, dmg, depth = 0, quiet = false) => {
       if (e.dead) return;
@@ -1381,12 +1415,19 @@
       const list = game.enemies;
       for (const e of list) {
         const d = Math.hypot(h.x - e.x, h.y - e.y) || 1;
-        e.x += (h.x - e.x) / d * e.speed * dt; e.y += (h.y - e.y) / d * e.speed * dt; e.hit = Math.max(0, e.hit - dt); e.push = Math.max(0, e.push - dt);
+        const sp = game.freeze > 0 ? 0 : e.slow > 0 ? 1 - 0.2 * game.frost : 1; e.slow = Math.max(0, (e.slow || 0) - dt);
+        e.x += (h.x - e.x) / d * e.speed * sp * dt; e.y += (h.y - e.y) / d * e.speed * sp * dt; e.hit = Math.max(0, e.hit - dt); e.push = Math.max(0, e.push - dt);
         if (d < e.r + h.r * 0.8 && !game.invuln) {
-          game.hp -= e.dmg; game.invuln = 1; game.hurtAt = game.time; game.regenT = 0; emit('hurt', h.x, h.y, e.dmg);
-          // A shove that clears the hero some room.
-          for (const o of list) { const od = Math.hypot(o.x - h.x, o.y - h.y) || 1; if (od < 110) { o.x += (o.x - h.x) / od * 80; o.y += (o.y - h.y) / od * 80; } }
-          if (game.hp <= 0) { game.hp = 0; game.ended = true; }
+          game.invuln = 1; game.hurtAt = game.time; game.regenT = 0;
+          if (game.shield) { game.shield = 0; game.shieldT = 0; emit('block', h.x, h.y, 0); }
+          else { const dmg = Math.max(1, e.dmg - (game.thorn >= 2 ? 1 : 0)); game.hp -= dmg; emit('hurt', h.x, h.y, dmg); }
+          if (game.thorn) { emit('thorn', h.x, h.y, 90); for (const o of list) if (!o.dead && Math.hypot(o.x - h.x, o.y - h.y) < 90 + o.r) hit(o, game.dmg * 2 * game.thorn, 0, true); }
+          shove(110, 80);
+          if (game.hp <= 0) {
+            // A rebirth revive: back to full, a wide shove and a moment untouchable.
+            if (game.revives > 0) { game.revives--; game.hp = game.maxHp; game.invuln = 2.5; shove(220, 140); emit('revive', h.x, h.y, 0); }
+            else { game.hp = 0; game.ended = true; }
+          }
         }
       }
       for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
@@ -1408,8 +1449,8 @@
       for (const b of game.bullets) {
         b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
         for (const e of list) {
-          if (e.dead || b.life <= 0 || b.hits.includes(e) || Math.hypot(e.x - b.x, e.y - b.y) >= e.r + 4) continue;
-          hit(e, game.dmg); b.hits.push(e);
+          if (e.dead || b.life <= 0 || b.hits.includes(e) || Math.hypot(e.x - b.x, e.y - b.y) >= e.r + 4 + game.size * 4) continue;
+          hit(e, game.dmg); b.hits.push(e); if (game.frost) e.slow = 1.5;
           if (game.chain && random() < 0.35 + 0.1 * game.chain) zap(e, game.dmg);
           if (b.pierce > 0) b.pierce--; else b.life = 0;
         }
@@ -1420,26 +1461,46 @@
         const a = game.spin + k * Math.PI * 2 / game.orbit, ox = h.x + Math.cos(a) * ring, oy = h.y + Math.sin(a) * ring;
         for (const e of list) if (!e.dead && !e.push && Math.hypot(e.x - ox, e.y - oy) < e.r + 9) { e.push = 0.3; hit(e, game.dmg * 0.6); const d = Math.hypot(e.x - h.x, e.y - h.y) || 1; e.x += (e.x - h.x) / d * 10; e.y += (e.y - h.y) / d * 10; }
       }
+      game.freeze = Math.max(0, game.freeze - dt);
+      if (game.bubble && !game.shield && (game.shieldT += dt) >= 24 - 6 * game.bubble) { game.shield = 1; game.shieldT = 0; emit('shield', h.x, h.y, 0); }
+      if (game.nova && (game.novaT -= dt) <= 0) {
+        game.novaT = 7 - 1.5 * game.nova; const r = 80 + 20 * game.nova; emit('nova', h.x, h.y, r);
+        for (const o of list) { const d = Math.hypot(o.x - h.x, o.y - h.y) || 1; if (!o.dead && d < r + o.r) { hit(o, game.dmg * (1 + 0.5 * game.nova), 0, true); o.x += (o.x - h.x) / d * 30; o.y += (o.y - h.y) / d * 30; } }
+      }
+      if (game.meteor && (game.meteorT -= dt) <= 0) {
+        game.meteorT = 5.5 - 1.2 * game.meteor; const live = list.filter(o => !o.dead);
+        for (let k = 0; k <= game.meteor && live.length; k++) { const o = live[Math.floor(random() * live.length)]; game.meteors.push({ x: o.x, y: o.y, t: 0.5 }); }
+      }
+      for (const m of game.meteors) if ((m.t -= dt) <= 0) { emit('meteor', m.x, m.y, 46); for (const o of list) if (!o.dead && Math.hypot(o.x - m.x, o.y - m.y) < 46 + o.r) hit(o, game.dmg * 2.5, 0, true); }
+      game.meteors = game.meteors.filter(m => m.t > 0);
+      if (game.bees && (game.beeT -= dt) <= 0) {
+        game.beeT = 0.9;
+        for (let k = 0; k < game.bees; k++) {
+          const p = game.bee(k); let near = null, best = 260;
+          for (const o of list) { const d = Math.hypot(o.x - p.x, o.y - p.y); if (!o.dead && d < best) { best = d; near = o; } }
+          if (near) { const a = Math.atan2(near.y - p.y, near.x - p.x); game.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 340, vy: Math.sin(a) * 340, life: 0.9, pierce: game.pierce, hits: [] }); }
+        }
+      }
       for (const b of game.bolts) b.t -= dt;
       game.bolts = game.bolts.filter(b => b.t > 0);
       game.enemies = list.filter(e => !e.dead); game.bullets = game.bullets.filter(b => b.life > 0 && b.x > -20 && b.x < W + 20 && b.y > -20 && b.y < H + 20);
       // Crystals and honey drift to the hero inside the pickup radius, quicker and quicker; the vacuum pulls every one.
       if (game.vac && (game.vacT -= dt) <= 0) { game.vacT = Math.max(6, 22 - 4 * game.vac); game.vacOn = 1.5; emit('vac', h.x, h.y, 0); }
       game.vacOn = Math.max(0, game.vacOn - dt);
-      for (const g of game.gems.concat(game.honey)) {
+      for (const g of game.gems.concat(game.honey, game.items)) {
         const d = Math.hypot(h.x - g.x, h.y - g.y) || 1;
         if (d < game.pickup || game.vacOn > 0) g.sp = Math.min(560, (g.sp || 0) + 1000 * dt);
         if (g.sp) { g.x += (h.x - g.x) / d * g.sp * dt; g.y += (h.y - g.y) / d * g.sp * dt; }
         if (d < h.r + 6) {
           g.got = true;
-          if (g.v) { game.xp += g.v; game.gemAt = game.time; } else if (game.hp < game.maxHp) { game.hp++; emit('heal', h.x, h.y, 1); }
+          if (g.kind) useItem(g); else if (g.v) { game.xp += g.v * game.xpMul; game.gemAt = game.time; } else if (game.hp < game.maxHp) { game.hp++; emit('heal', h.x, h.y, 1); }
         }
       }
-      game.gems = game.gems.filter(g => !g.got); game.honey = game.honey.filter(g => !g.got);
+      game.gems = game.gems.filter(g => !g.got); game.honey = game.honey.filter(g => !g.got); game.items = game.items.filter(g => !g.got);
       // Levels come quick at first and slow down.
       while (game.xp >= game.need) {
         game.xp -= game.need; game.level++; game.need = Math.round(1 + game.level * 1.2 + game.level * game.level * 0.05); game.levelAt = game.time; emit('level', h.x, h.y, game.level);
-        if (game.choices) game.pending++; else offer();
+        if (game.choices) game.pending++; else offer('level');
       }
       game.score = Math.floor(game.time) * 10 + game.kills;
     };
@@ -1450,6 +1511,7 @@
       // A level-up pauses the run until a card is picked.
       while (left > 0 && !game.ended && !game.choices) { const dt = Math.min(left, 1 / 60); left -= dt; tick(dt); }
     };
+    game.bee = k => { const a = game.spin * 0.45 + k * Math.PI * 2 / Math.max(1, game.bees); return { x: game.hero.x + Math.cos(a) * 58, y: game.hero.y + Math.sin(a) * 58 }; };
     game.take = () => game.events.splice(0);
     return game;
   }
@@ -2605,6 +2667,20 @@
     try { localStorage.setItem(GAME_BEST_KEY, JSON.stringify(all)); } catch {}
     return true;
   }
+  // 젤리 생존기's rebirth: every finished run turns into stars (✦), spent on permanent perks for the next runs. Kept in
+  // this browser only. [id, icon, name, effect, max level, base cost]
+  const SURVIVE_META_KEY = "gfx-games-survive-meta";
+  const SURVIVE_PERKS = [
+    ['atk', '⚔️', '단단한 주먹', '시작 피해 +8%', 10, 6], ['hp', '❤️', '큰 젤리', '시작 HP +1', 5, 8], ['spd', '👟', '가벼운 발', '이동 +5%', 5, 5],
+    ['xp', '📘', '공부벌레', '경험치 +10%', 5, 6], ['cool', '⚡', '연사', '발사 간격 -5%', 5, 8], ['magnet', '🧲', '자석 주머니', '줍는 범위 +12%', 5, 4],
+    ['luck', '🍀', '행운', '치명타 +2% · 아이템 자주', 5, 6], ['card', '🎁', '출발 선물', '시작할 때 카드 +1', 3, 15], ['revive', '🌱', '두 번째 목숨', '쓰러지면 한 번 부활', 2, 30],
+  ];
+  const surviveCost = (base, lv) => Math.round(base * Math.pow(1 + lv, 1.6));
+  function surviveMeta() {
+    try { const m = JSON.parse(localStorage.getItem(SURVIVE_META_KEY) || "{}") || {}; return { stars: Math.max(0, m.stars | 0), reborn: Math.max(0, m.reborn | 0), perks: m.perks && typeof m.perks === "object" ? m.perks : {} }; }
+    catch { return { stars: 0, reborn: 0, perks: {} }; }
+  }
+  function saveSurviveMeta(m) { try { localStorage.setItem(SURVIVE_META_KEY, JSON.stringify(m)); } catch {} }
   const clock = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
   function makeLoadingGames(overlay) {
     const panel = el('section', 'gfx-load-games');
@@ -2633,7 +2709,7 @@
       water: { name: '물 색깔 정리', tab: '물 정리', icon: '🧪', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '4색부터 · 레벨마다 늘어남'], ['easy', '쉬움', '6색부터 · 최대 10색'], ['normal', '보통', '7색부터 · 빨리 늘어남'], ['hard', '어려움', '8색부터 · 빨리 늘어남'], ['expert', '달인', '9색부터 · 최대 10색']], make: lv => newWaterSortGame(Math.random, lv) },
       knife: { name: '칼 던지기', tab: '칼 던지기', icon: '🔪', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '칼 6개부터 · 5판마다 보스'], ['easy', '쉬움', '빠르게 돌아요 · 칼 7개부터'], ['normal', '보통', '아주 빠르게 · 칼 8개부터'], ['hard', '어려움', '더 빠르게 · 칼 9개부터'], ['expert', '달인', '가장 빠르게 · 칼 10개부터']], make: lv => newKnifeGame(Math.random, lv) },
       count: { name: '인원 모으기', tab: '인원 모으기', icon: '🏃', level: 'normal', ownSfx: true, stages: true, levels: [['easiest', '입문', '1명 출발'], ['easy', '쉬움', '1명 출발 · 나쁜 문과 적 많이'], ['normal', '보통', '1명 출발 · 큰 적 무리'], ['hard', '어려움', '1명 출발 · 더 큰 적 무리 · 나쁜 문 대부분'], ['expert', '달인', '1명 출발 · 가장 큰 적 무리 · 거의 다 나쁜 문']], make: (lv, s) => newCountMastersGame(Math.random, lv, s) },
-      survive: { name: '젤리 생존기', tab: '생존기', icon: '🛡️', level: 'normal', ownSfx: true, levels: [['easiest', '입문', 'HP 10 · 천천히 늘고 늦게 거세져요'], ['easy', '쉬움', 'HP 9 · 55초에 첫 포위 · HP가 빨리 차요'], ['normal', '보통', 'HP 8 · 40초에 첫 포위 · 1분마다 큰 젤리'], ['hard', '어려움', 'HP 7 · 30초에 첫 포위 · 빨리 단단해져요'], ['expert', '달인', 'HP 6 · 25초에 첫 포위 · 아주 빨리 거세져요']], make: lv => newSurviveGame(Math.random, lv) },
+      survive: { name: '젤리 생존기', tab: '생존기', icon: '🛡️', level: 'normal', ownSfx: true, levels: [['easiest', '입문', 'HP 10 · 천천히 늘고 늦게 거세져요'], ['easy', '쉬움', 'HP 9 · 55초에 첫 포위 · HP가 빨리 차요'], ['normal', '보통', 'HP 8 · 40초에 첫 포위 · 1분마다 큰 젤리'], ['hard', '어려움', 'HP 7 · 30초에 첫 포위 · 빨리 단단해져요'], ['expert', '달인', 'HP 6 · 25초에 첫 포위 · 아주 빨리 거세져요']], make: lv => { const m = surviveMeta(); return newSurviveGame(Math.random, lv, { ...m.perks, reborn: m.reborn }); } },
       bus: { name: '사탕 버스', tab: '사탕 버스', icon: '🚌', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '버스 5대 · 3색 · 칸 5개'], ['easy', '쉬움', '버스 6대 · 4색 · 칸 5개'], ['normal', '보통', '버스 7대 · 5색 · 칸 5개'], ['hard', '어려움', '버스 8대 · 6색 · 칸 4개 · 4명 탑승'], ['expert', '달인', '버스 9대 · 7색 · 칸 4개 · 4명 탑승']], make: lv => newBusGame(Math.random, lv) },
       zombie: { name: '좀비 학교 탈출', tab: '좀비 탈출', icon: '🧟', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '생존자 10명 · 좀비 1 · 느리고 감염 5.5초 · 90초'], ['easy', '쉬움', '생존자 9명 · 좀비 1 · 감염 4.5초 · 100초'], ['normal', '보통', '생존자 8명 · 좀비 2 · 감염 3.8초 · 120초'], ['hard', '어려움', '생존자 7명 · 좀비 2 · 빠르고 감염 3.2초 · 135초'], ['expert', '달인', '생존자 6명 · 좀비 2 · 아주 빠르고 감염 2.6초 · 150초 · 아이템 드묾']], make: lv => newZombieGame(Math.random, lv) },
       jump: { name: '구름 점프', tab: '구름 점프', icon: '🦘', level: 'normal', ownSfx: true, levels: [['easiest', '입문', '넓은 구름 · 간격이 좁고 천천히 어려워져요'], ['easy', '쉬움', '구름이 조금 좁아지고 적이 가끔 나와요'], ['normal', '보통', '높이 갈수록 구름이 좁아지고 움직이고 깨지고 적이 늘어요'], ['hard', '어려움', '빨리 좁아지고 깨지는 구름과 적이 많아요'], ['expert', '달인', '작은 구름 · 넓은 간격 · 깨지는 구름과 적이 가득해요']], make: lv => newJumpGame(Math.random, lv) },
@@ -2849,10 +2925,10 @@
         if (value != null && !st.recorded) { st.recorded = true; st.newBest = saveGameBest(record, value, lower); }
       };
       const chips = (list) => stats.replaceChildren(...list.filter(Boolean).map(([text, alert]) => { const s = el('span', '', text); if (alert) s.dataset.alert = ''; return s; }));
-      const showResult = (headline, line) => {
+      const showResult = (headline, line, extra, againLabel) => {
         if (st.hideResult) { result.hidden = true; return; }
         if (!result.hidden && result.dataset.headline === headline) return;
-        const card = el('div'), again = button('다시 하기', renew, 'gfx-game-again');
+        const card = el('div'), again = button(againLabel || '다시 하기', renew, 'gfx-game-again');
         card.append(el('b', '', headline), el('span', '', line));
         if (st.newBest) card.append(el('em', '', '최고 기록!'));
         if (g.stages && (g.next ? g.next(st.game) : st.game.won)) {
@@ -2860,6 +2936,7 @@
           card.append(el('span', 'gfx-game-onward', (st.stage + 1) + '단계는 조금 더 어려워요'), onward);
           again.classList.remove('gfx-game-again');
         }
+        extra?.(card);
         card.append(again);
         result.dataset.headline = headline; result.replaceChildren(card); result.hidden = false;
       };
@@ -4621,6 +4698,13 @@
               else if (ev.t === 'heal') { healAt = game.time; pop(ev.x, ev.y, '#F58CC0', 8, 70); if (nums.length < 40) nums.push({ x: ev.x, y: ev.y - 16, v: '+1 ♥', crit: false, heal: true, t: 0.8, max: 0.8 }); sfx.play('coin'); }
               else if (ev.t === 'vac') ring(ev.x, ev.y, 200, '#62D3DE', 0.6);
               else if (ev.t === 'ring') { shake = Math.max(shake, 5); flash = [0.3, '229,72,77']; sfx.play('slam'); }
+              else if (ev.t === 'nova') { ring(ev.x, ev.y, ev.v, '#FFE27A', 0.45); shake = Math.max(shake, 3); sfx.play('bounce'); }
+              else if (ev.t === 'meteor') { ring(ev.x, ev.y, ev.v, '#FFB347', 0.3); pop(ev.x, ev.y, '#FF9A3D', 8, 140); shake = Math.max(shake, 4); blast = true; }
+              else if (ev.t === 'thorn') ring(ev.x, ev.y, ev.v, '#4FC487', 0.3);
+              else if (ev.t === 'block') { ring(ev.x, ev.y, 60, '#9BE3F5', 0.4); sfx.play('flip'); }
+              else if (ev.t === 'shield') ring(ev.x, ev.y, 30, '#9BE3F5', 0.4);
+              else if (ev.t === 'revive') { flash = [0.6, '170,240,170']; ring(ev.x, ev.y, 220, '#4FC487', 0.7); pop(ev.x, ev.y, '#4FC487', 30, 200); shake = 8; sfx.play('win'); }
+              else if (ev.t === 'item') { sfx.play(ev.kind === 'chest' ? 'bonus' : 'power'); if (ev.kind === 'bomb') { flash = [0.5, '255,255,255']; shake = 10; } else if (ev.kind === 'freeze') flash = [0.4, '155,227,245']; }
             }
             if (kills) { sfx.play('pop', Math.min(4, kills)); if (big) { shake = Math.max(shake, 5); sfx.play('hit', 2); } }
             if (blast) sfx.play('hit', 1);
@@ -4673,6 +4757,14 @@
               if (!kTile(67, g.x - gs / 2, g.y - gs / 2, gs)) { ctx.save(); ctx.translate(g.x, g.y); ctx.rotate(Math.PI / 4); ctx.beginPath(); ctx.rect(-s, -s, s * 2, s * 2); ink2(g.v > 1 ? '#F58CC0' : '#62D3DE', 1.6); ctx.restore(); }
             }
             for (const g of game.honey) { const hy = g.y + Math.sin(game.time * 6 + g.x) * 2; if (!kTile(44, g.x - 11, hy - 11, 22)) label('🍯', g.x, hy, 17, css(t.text)); }
+            for (const it of game.items) {
+              const iy = it.y + Math.sin(game.time * 5 + it.x) * 2.5;
+              ctx.beginPath(); ctx.arc(it.x, iy, 14, 0, Math.PI * 2); ink2('rgba(255,255,255,.75)', 2); label(({ chest: '🎁', bomb: '💣', magnet: '🧲', freeze: '🧊' })[it.kind], it.x, iy + 1, 18, css(t.text));
+            }
+            for (const m of game.meteors) {
+              const p = 1 - m.t / 0.5; ctx.globalAlpha = 0.3; disc(m.x, m.y, 46 * Math.max(0.2, p), '#FF9A3D'); ctx.globalAlpha = 1;
+              label('☄️', m.x + 50 * (1 - p), m.y - 110 * (1 - p), 22, css(t.text));
+            }
             for (const e of game.enemies) {
               const wob = 1 + 0.08 * Math.sin(game.time * 9 + e.x * 0.1);
               const fs = e.r * 2.7, fr = FOE_FRAMES[e.kind % 4][Math.floor(game.time * 6 + e.x * 0.05) & 1];
@@ -4680,6 +4772,7 @@
               if (kChar(fr, e.x - fs / 2, e.y - fs * 0.56 + (wob - 1) * e.r * 3, fs)) { if (e.hit > 0) { ctx.globalAlpha = 0.55; disc(e.x, e.y, e.r * 0.8, '#ffffff'); ctx.globalAlpha = 1; } }
               else blob(e.x, e.y, e.r, e.hit > 0 ? '#ffffff' : FOES[e.kind], wob);
               if (e.elite) { ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 3, 0, Math.PI * 2); ctx.lineWidth = 2.5; ctx.strokeStyle = '#FFD447'; ctx.stroke(); }
+              if (game.freeze > 0 || e.slow > 0) { ctx.globalAlpha = game.freeze > 0 ? 0.5 : 0.3; disc(e.x, e.y, e.r, '#9BE3F5'); ctx.globalAlpha = 1; }
               if (e.big) { const w = 34; ctx.beginPath(); ctx.roundRect(e.x - w / 2, e.y - e.r - 12, w, 6, 3); ink2(css(t.card), 1.5); if (e.hp > 0) { ctx.beginPath(); ctx.roundRect(e.x - w / 2, e.y - e.r - 12, Math.max(4, w * e.hp / e.max), 6, 3); ink2('#E5484D', 1.5); } }
             }
             // Blasts and rings under the shots.
@@ -4688,8 +4781,8 @@
             // Shots: a streak, longer for piercing ones.
             for (const b of game.bullets) {
               const k = b.pierce > 0 || game.pierce ? 0.05 : 0.025;
-              ctx.beginPath(); ctx.moveTo(b.x - b.vx * k, b.y - b.vy * k); ctx.lineTo(b.x, b.y); ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.strokeStyle = css(t.line); ctx.stroke();
-              ctx.lineWidth = 3.5; ctx.strokeStyle = '#FFD447'; ctx.stroke(); ctx.lineCap = 'butt';
+              ctx.beginPath(); ctx.moveTo(b.x - b.vx * k, b.y - b.vy * k); ctx.lineTo(b.x, b.y); ctx.lineWidth = 7 + game.size * 3; ctx.lineCap = 'round'; ctx.strokeStyle = css(t.line); ctx.stroke();
+              ctx.lineWidth = 3.5 + game.size * 2.5; ctx.strokeStyle = '#FFD447'; ctx.stroke(); ctx.lineCap = 'butt';
             }
             // Lightning: a zigzag from blob to blob.
             for (const b of game.bolts) {
@@ -4710,6 +4803,8 @@
               ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ink2('#F58CC0', 2);
               ctx.beginPath(); ctx.arc(x, y, 4, a, a + 4); ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffffff'; ctx.stroke();
             }
+            if (game.shield) { ctx.beginPath(); ctx.arc(h.x, h.y, h.r + 12 + Math.sin(game.time * 5), 0, Math.PI * 2); ctx.fillStyle = 'rgba(155,227,245,.18)'; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(110,190,240,.85)'; ctx.stroke(); }
+            for (let k = 0; k < game.bees; k++) { const p = game.bee(k); label('🐝', p.x, p.y + Math.sin(game.time * 12 + k) * 2, 16, css(t.text)); }
             for (const p of parts) { p.t -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.92; p.vy *= 0.92; ctx.globalAlpha = Math.min(1, p.t * 3); disc(p.x, p.y, p.r, p.c); }
             ctx.globalAlpha = 1; parts = parts.filter(p => p.t > 0);
             // Damage numbers float up; a critical one is bigger and golden.
@@ -4721,6 +4816,7 @@
             ctx.beginPath(); ctx.roundRect(10, 10, W - 20, 14, 7); ink2(css(t.card), 2);
             if (game.xp > 0) { ctx.beginPath(); ctx.roundRect(10, 10, Math.max(14, (W - 20) * game.xp / game.need), 14, 7); ink2('#62D3DE', 2); }
             card(10, 32, 92, 30, 15, css(t.card), 3); label('❤ ' + game.hp + '/' + game.maxHp, 56, 48, 16, css(t.text));
+            if (game.revives) label('🌱' + game.revives, 121, 48, 14, css(t.text));
             card(W / 2 - 40, 32, 80, 30, 15, css(t.card), 3); label(clock(game.time * 1000), W / 2, 48, 16, css(t.text));
             card(W - 102, 32, 92, 30, 15, css(t.card), 3); label('Lv ' + game.level, W - 56, 48, 16, css(t.text));
             // The combo: it grows and changes colour while kills keep coming, and pulses on each one.
@@ -4749,7 +4845,7 @@
               // Cards rise and fade in while they are not yet pressable.
               const u = Math.min(1, (now - cardsAt) / READY), ease = 1 - Math.pow(1 - u, 3);
               ctx.globalAlpha = 0.5 + 0.5 * ease; fill(0, 0, W, H, css(t.ink, null, 1, 0.78)); ctx.globalAlpha = 1;
-              outlined('레벨 업!', W / 2, 62 + Math.sin(now / 160) * 3, 34, '#FFD447');
+              outlined(({ chest: '보물 상자!', free: '환생 선물!' })[game.choiceKind] || '레벨 업!', W / 2, 62 + Math.sin(now / 160) * 3, 34, '#FFD447');
               label(u < 1 ? '잠깐만요…' : '카드를 눌렀다 떼어 고르세요 · 1·2·3 키', W / 2, 98, 15, css(t.text, null, 1, 0.8));
               game.choices.forEach((c, i) => {
                 const r = CARD(i), down = press && press.on && press.i === i, y = r.y + (1 - ease) * 34 + (down ? 3 : 0);
@@ -5658,9 +5754,28 @@
             info.textContent = '탭·스페이스로 칼 던지기 · 꽂힌 칼에 닿으면 끝 · 사과를 맞혀 보세요';
             if (game.ended && game.time - game.fail.t > 0.9) showResult('칼이 튕겨 나갔어요', '점수 ' + game.score + ' · 스테이지 ' + game.stage + ' · 사과 ' + game.apples);
           } else if (kind === 'survive') {
-            chips([['⭐ ' + game.score], ['❤ ' + game.hp + '/' + game.maxHp], b0 != null && ['🏆 ' + b0.toLocaleString()]]);
-            info.textContent = '화면을 끌거나 WASD·방향키로 이동 · 공격은 자동 · 레벨 업 카드는 탭이나 1·2·3';
-            if (game.ended && game.over > 0.8) showResult('젤리가 녹아 버렸어요', clock(game.time * 1000) + ' 생존 · 처치 ' + game.kills + ' · ' + game.score.toLocaleString() + '점');
+            chips([['⭐ ' + game.score], ['❤ ' + game.hp + '/' + game.maxHp], game.reborn > 0 && ['🌱 환생 ' + game.reborn], b0 != null && ['🏆 ' + b0.toLocaleString()]]);
+            info.textContent = '화면을 끌거나 WASD·방향키로 이동 · 공격은 자동 · 레벨 업 카드는 탭이나 1·2·3 · 쓰러지면 별사탕으로 환생 강화';
+            if (game.ended && game.over > 0.8) {
+              // The run's stars are banked once, and the run counts as a rebirth.
+              if (st.awarded == null) { st.awarded = game.stars(); const m = surviveMeta(); m.stars += st.awarded; m.reborn++; saveSurviveMeta(m); }
+              const shop = card => {
+                const box = el('div', 'gfx-reborn');
+                const fill = () => {
+                  const m = surviveMeta();
+                  box.replaceChildren(el('span', 'gfx-reborn-head', '🌱 환생 ' + m.reborn + '회 · ✦ 별사탕 ' + m.stars + '개'));
+                  for (const [id, icon, name, desc, max, base] of SURVIVE_PERKS) {
+                    const lv = m.perks[id] | 0, cost = surviveCost(base, lv), full = lv >= max;
+                    const b = button('', () => { const n = surviveMeta(), l = n.perks[id] | 0, c = surviveCost(base, l); if (l >= max || n.stars < c) return; n.stars -= c; n.perks[id] = l + 1; saveSurviveMeta(n); sfx.play('power'); fill(); });
+                    b.append(el('i', '', icon), el('span', '', name + ' ' + lv + '/' + max), el('small', '', full ? '완료' : '✦' + cost));
+                    b.title = desc; b.setAttribute('aria-label', name + ' ' + lv + '/' + max + ' · ' + desc + (full ? ' · 최대' : ' · 별사탕 ' + cost));
+                    b.disabled = full || m.stars < cost; box.append(b);
+                  }
+                };
+                fill(); card.append(box);
+              };
+              showResult('젤리가 녹아 버렸어요', clock(game.time * 1000) + ' 생존 · 처치 ' + game.kills + ' · 별사탕 +' + st.awarded + '✦', shop, '🌱 환생해서 다시');
+            }
           } else if (kind === 'zombie') {
             chips([['🗝 ' + game.keys + '/' + game.NEED], ['👥 ' + game.humans() + (game.saved ? ' · 탈출 ' + game.saved : '')], b0 != null && ['🏆 ' + b0.toLocaleString()]]);
             info.textContent = '왼쪽 조이스틱·WASD·방향키로 이동 · 오른쪽 버튼·스페이스·E로 아이템 · 열쇠 3개를 모아 출구로, 또는 시간이 끝날 때까지 버티세요';
@@ -5711,6 +5826,12 @@
    * capsule for buttons, a red one for the picked or main button, a grey one when disabled, a framed cream panel. */
   const KENNEY_UI = { button: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAABGdBTUEAALGPC/xhBQAAAA9QTFRFAAAAo3A6xYdH//HSbUsnANKYsQAAAAF0Uk5TAEDm2GYAAAAqSURBVAjXY2DAACwuYODA4AIFDC5CSkCgCGQoGwOBEakMuHaYgXArMAAAvqsUdSpxfoEAAAAASUVORK5CYII=', pick: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAgMAAABinRfyAAAABGdBTUEAALGPC/xhBQAAAAxQTFRFAAAA7Gpfz15Tjj84WA+56wAAAAF0Uk5TAEDm2GYAAAAnSURBVAjXY2CAA/v///8w/AcChp+hofkM31atmo+bACsBKwZrgwMAo7EkBXhFaI4AAAAASUVORK5CYII=', off: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAgMAAABinRfyAAAABGdBTUEAALGPC/xhBQAAAAxQTFRFAAAAlK/Gd42fUV9rTn9+UQAAAAF0Uk5TAEDm2GYAAAAnSURBVAjXY2CAA/v///8w/AcChp+hofkM31atmo+bACsBKwZrgwMAo7EkBXhFaI4AAAAASUVORK5CYII=', panel: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQBAMAAADt3eJSAAAABGdBTUEAALGPC/xhBQAAAA9QTFRFAAAAo3A6//HSxYdHbUsnNe8zQwAAAAF0Uk5TAEDm2GYAAAAySURBVAjXY2BxAQMHBhcoYHARNgYCQyDDGAxADEEgADOElJQUSWfAtcMMhFsBsxTmDAAgqBlfoJlVIQAAAABJRU5ErkJggg==' };
   const CSS_MORE = `
+/* 젤리 생존기's rebirth shop on its result card: two columns of small perk buttons. */
+.gfx-reborn { display:grid; grid-template-columns:1fr 1fr; gap:4px; width:min(310px, 78vw); margin:.2em 0; font-size:.78em; }
+.gfx-reborn-head { grid-column:1 / -1; text-align:center; font-size:1.1em; }
+.gfx-game-result .gfx-reborn button { display:grid; grid-template-columns:auto 1fr; align-items:center; column-gap:.3em; padding:.25em .5em; font-size:1em; text-align:left; line-height:1.15; }
+.gfx-reborn button i { grid-row:span 2; font-style:normal; font-size:1.3em; } .gfx-reborn button small { opacity:.75; }
+.gfx-reborn button:disabled { opacity:.55; cursor:default; }
 /* 픽셀 UI (the [🎨 픽셀] switch): buttons and panels from the pixel tiles, crisp; boards and their cells keep their look. */
 .gfx-load-games[data-pixel] button:not(.gfx-game-board *, .gfx-game-levels button, .gfx-shop-oven) {
   border:10px solid transparent !important; border-image:url(${KENNEY_UI.button}) 5 fill / 10px stretch !important; border-radius:0 !important;
