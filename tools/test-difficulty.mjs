@@ -18,7 +18,7 @@ test('every game builds at all five levels', () => {
 test('the game table offers the same five levels for every game', () => {
   const table = source.slice(source.indexOf('    const GAMES = {'), source.indexOf('    const fresh = (which'));
   const rows = table.split('\n').filter((l) => l.includes('levels: ['));
-  assert.equal(rows.length, 25);
+  assert.equal(rows.length, 26);
   for (const row of rows) assert.deepEqual([...row.matchAll(/\['(\w+)', '[^']+', '[^']*'\]/g)].map((m) => m[1]), LEVELS, row.slice(0, 40));
 });
 test('levels get harder from 입문 to 달인', () => {

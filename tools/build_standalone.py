@@ -20,7 +20,7 @@ MOUNT = r"""
   const wrap = el("div");
   const shadow = host.attachShadow({ mode: "open" });
   // Games drawn for a wide screen (the T-Rex is 600×170, the runner and the zombie school as wide): on an upright phone they ask to be turned.
-  const WIDE = ["dino", "dash", "zombie"];
+  const WIDE = ["dino", "dash", "zombie", "school"];
   const page = new CSSStyleSheet();
   page.replaceSync(":host(:not([data-game-large])) { position:relative; inset:auto; width:100%; height:100%; } :host(:not([data-game-large])) .gfx-load-games { --room:calc(100cqh - 150px); }"
     + " .gfx-load-games { position:relative; } .gfx-shelf-toggle { display:none; }"
